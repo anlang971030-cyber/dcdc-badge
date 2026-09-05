@@ -8,6 +8,8 @@ export const imageState = {
   url: '',
   originalUrl: '',
   subjectUrl: '',
+  previewSubject: null,
+  previewUrl: '',
   error: '',
   busy: false,
   split: false,
@@ -45,6 +47,10 @@ export function editorMarkup() {
         <img src="${s.originalUrl}" alt="待处理原图" style="display:block;max-width:100%;height:auto;vertical-align:top;pointer-events:none;">
         <div id="selection-box" style="position:absolute;border:2px solid rgba(46,108,246,.95);background:rgba(46,108,246,.12);box-shadow:0 0 0 9999px rgba(18,37,66,.12);border-radius:14px;${selectionStyle(s.selection)}"></div>
       </div>
+      <div class="subject-preview" style="margin-top:14px;">
+        <label>主体快速预览</label>
+        ${s.previewUrl ? `<img src="${s.previewUrl}" alt="主体预览" style="max-width:240px;max-height:240px;object-fit:contain;border-radius:18px;background:#f6f8fb;">` : '<small>框选完成后显示预览（不会运行AI/GrabCut，避免卡顿）。</small>'}
+      </div>
     </div>` : '';
 
   return `<section class="screen"><p class="eyebrow">IMAGE TO CHARACTERS</p><h2>${COPY.title}</h2><p class="lead">${COPY.hint}</p><div class="stack"><div class="field"><label for="image-file">上传图片</label><input id="image-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp"><small>不超过 20 MB / 4000 万像素；处理时最长边缩至 1600 px，GIF 使用静态帧。</small></div>${stage}${select('preset','字符预设',[['CUSTOM','自定义中文 / 英文 / 代码'],['CLASSIC','经典'],['DENSE','密集'],['BLOCK','方块']])}<div class="field"><label for="customText">自定义字符（空白会忽略）</label><textarea id="customText" data-config="customText" maxlength="4000" rows="3">${esc(c.customText)}</textarea></div>${select('colorMode','颜色',[['ORIGINAL','原图颜色'],['BLACK','黑色'],['BLUE','蓝色'],['CUSTOM','自定义颜色']])}<div class="field"><label for="customColor">自定义颜色值</label><input type="color" id="customColor" data-config="customColor" value="${c.customColor}"></div><details><summary>高级设置</summary><div class="advanced-grid">${[['columns','列数',40,260],['fontSize','字符大小（像素块）',6,32],['lineHeight','行高',6,40],['alphaThreshold','透明阈值',120,255]].map(([id,t,min,max])=>`<div class="field"><label for="${id}">${t}</label><input type="number" id="${id}" data-config="${id}" min="${min}" max="${max}" value="${c[id]}"></div>`).join('')}</div></details><label><input id="split-view" type="checkbox" ${s.split ? 'checked' : ''}> 原图 / 字符画并排对比</label></div><p class="error" role="status" id="image-status">${esc(s.error)}</p><div class="image-comparison ${s.split ? 'split' : ''}" id="image-comparison">${s.originalUrl && s.split ? `<figure><img src="${s.originalUrl}" alt="原图"><figcaption>原图</figcaption></figure>` : ''}${s.url ? `<figure class="checker"><img src="${s.url}" alt="字符画"><figcaption>透明字符画</figcaption></figure>` : ''}</div><div class="actions"><button class="btn btn-primary" data-action="convert-image" ${s.busy ? 'disabled' : ''}>${s.busy ? '正在处理…' : '应用效果 / 生成字符画'}</button><button class="btn btn-primary" data-action="image-badge" ${!s.artwork || s.busy ? 'disabled' : ''}>生成我的标识牌 →</button><button class="btn btn-ghost" data-action="download-art" ${!s.url || s.busy ? 'disabled' : ''}>下载透明字符画 PNG</button><button class="btn btn-ghost" data-action="choose-mode">返回制作方式</button></div></section>`;
@@ -60,12 +66,18 @@ export function releaseArtwork() {
   s.subjectUrl = '';
   if (s.subject) s.subject.width = 1;
   s.subject = null;
+  if (s.previewUrl) URL.revokeObjectURL(s.previewUrl);
+  s.previewUrl = '';
+  s.previewSubject = null;
 }
 
 export function clearSelection() {
   imageState.selection = null;
   imageState.selecting = false;
   imageState.dragStart = null;
+  if (imageState.previewUrl) URL.revokeObjectURL(imageState.previewUrl);
+  imageState.previewUrl = '';
+  imageState.previewSubject = null;
 }
 
 export function setUseSelection(checked) {
@@ -84,12 +96,38 @@ export function updateSelection(x, y) {
   return imageState.selection;
 }
 
+async function previewSelectionSubject() {
+  const s = imageState;
+  if (!s.selection || !s.source) return;
+
+  const x = Math.floor(s.selection.x * s.source.width);
+  const y = Math.floor(s.selection.y * s.source.height);
+  const w = Math.max(1, Math.floor(s.selection.w * s.source.width));
+  const h = Math.max(1, Math.floor(s.selection.h * s.source.height));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext('2d').drawImage(s.source, x, y, w, h, 0, 0, w, h);
+
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) return;
+
+  if (s.previewUrl) URL.revokeObjectURL(s.previewUrl);
+  s.previewSubject = canvas;
+  s.previewUrl = URL.createObjectURL(blob);
+}
+
 export function endSelection(x, y) {
   if (!imageState.selecting || !imageState.dragStart) return imageState.selection;
   imageState.selection = normalizeRect(imageState.dragStart.x, imageState.dragStart.y, clamp01(x), clamp01(y));
   imageState.selecting = false;
   imageState.dragStart = null;
-  if (imageState.selection.w < 0.01 || imageState.selection.h < 0.01) imageState.selection = null;
+  if (imageState.selection.w < 0.01 || imageState.selection.h < 0.01) {
+    imageState.selection = null;
+  } else {
+    previewSelectionSubject().catch(() => {});
+  }
   return imageState.selection;
 }
 
