@@ -12,7 +12,7 @@ export const DEFAULTS = Object.freeze({
 
 export const COPY = Object.freeze({
   title: '上传图片，生成透明 ASCII 人像',
-  hint: '支持自定义中文 / 英文 / 代码字符。可直接上传图片生成 ASCII。字符大小控制的是像素采样块大小：越大，采样点越少，颗粒感越强。支持通过复选框切换反相效果。',
+  hint: '支持单张或多张图片上传，并逐张设置 ASCII 生成参数。字符大小控制的是像素采样块大小：越大，采样点越少，颗粒感越强。生成完成后，可像直接上传图片一样继续排版编辑。',
   badgeLabel: '图片定制 ASCII 标识牌'
 });
 
