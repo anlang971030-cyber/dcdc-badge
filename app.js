@@ -1,12 +1,12 @@
 import { COPY } from './ascii/ascii-canvas.js';
 import { imageState, editorMarkup, handleImageFile, convertImage, releaseArtwork } from './ascii/image-editor.js';
-import { directEditorMarkup, handleBoardFiles, updateActiveBoardField, resetDirectEditor, boardState, selectBoardItem, removeBoardItem, moveBoardItem, getBoardItems, directImageState, beginBoardDrag, updateBoardDrag, endBoardDrag } from './ascii/direct-image-editor.js';
+import { directEditorMarkup, handleDirectFiles, directItems, updateDirectItem, removeDirectItem, moveDirectItem } from './ascii/direct-image-editor.js';
 import { renderImageBadge } from './badge/badge-renderer.js?v=20260905-4';
 import { QUESTIONS } from './personality/questions.js';
 import { scorePersonality } from './personality/scoring.js';
 import { ARCHETYPE_BY_ID } from './personality/archetypes.js';
 import { createPersonaSelection } from './personality/persona-variants.js';
-import { INTEREST_ASSETS, MAX_INTERESTS, RECOMMENDED_INTERESTS, toggleInterestSelection } from './interests/interest-assets.js?v=20260905-4';
+import { INTEREST_ASSETS, MAX_INTERESTS, RECOMMENDED_INTERESTS, sanitizeInterests, toggleInterestSelection } from './interests/interest-assets.js?v=20260905-4';
 import { renderPersonaComposer } from './components/persona-composer.js?v=20260905-4';
 import { mountDebugPanel } from './debug-panel.js?v=20260905-4';
 import { renderBadge } from './badge/badge-renderer.js?v=20260905-4';
@@ -55,18 +55,10 @@ function chineseLength(value) {
   return [...value.trim()].length;
 }
 
-function visualStep() {
-  if (state.step === 'mode' || state.step === 3) return 3;
-  if (state.step === 'image-branch' || state.step === 'image' || state.step === 'direct-image' || state.step === 4) return 4;
-  if (state.step === 5) return 5;
-  return Number(state.step) || 1;
-}
-
 const brand = `<div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>我的数创标识牌</span></div>`;
 
 function shell(content) {
-  const step = visualStep();
-  return `<div class="app-shell"><header class="topbar">${brand}<span class="step-count">Step ${step} / 5</span></header><div class="progress" aria-hidden="true"><span style="width:${step * 20}%"></span></div>${content}</div>`;
+  return `<div class="app-shell"><header class="topbar">${brand}<span class="step-count">Step ${typeof state.step === 'number' ? state.step : 3} / 5</span></header><div class="progress" aria-hidden="true"><span style="width:${(typeof state.step === 'number' ? state.step : 3) * 20}%"></span></div>${content}</div>`;
 }
 
 function field(id, label, placeholder, value, hint, maxLength) {
@@ -87,14 +79,6 @@ function renderProfile() {
     ${profile.group === '其他' ? field('customGroup', '自定义部门 / 组别', '请输入部门或组别', profile.customGroup, '不超过 10 个字', 10) : ''}
     ${field('specialty', '专业或所属方向', '例如：建筑数字化', profile.specialty, '不超过 12 个字 · 可以填专业，如建筑、结构；也可以填点儿别的，如念力码农、摸鱼者、修仙达人、选择困难选手等', 12)}
   </div><div class="actions split"><button class="btn btn-ghost" data-action="back">返回</button><button class="btn btn-primary" data-action="to-test">选择制作方式<span>→</span></button></div></section>`);
-}
-
-function renderMode() {
-  return shell(`<section class="screen"><p class="eyebrow">MAKE IT YOURS</p><h2>选择制作方式</h2><p class="lead">${escapeHtml(state.profile.name)}，用你喜欢的方式制作标识牌。</p><div class="stack"><button class="answer-card" data-action="personality-mode">我要做人格测试 →</button><button class="answer-card" data-action="image-mode">我要上传图片定制我的标识卡 →</button></div><div class="actions"><button class="btn btn-ghost" data-action="edit-profile">返回基础信息</button></div></section>`);
-}
-
-function renderImageBranchChoice() {
-  return shell(`<section class="screen"><p class="eyebrow">IMAGE WORKFLOW</p><h2>选择图片制作方式</h2><p class="lead">图片定制分为两种：一种是直接上传喜欢的图片自由排版，另一种是保留当前的 ASCII 生成方式。</p><div class="stack"><button class="answer-card" data-action="direct-image-mode">上传心仪图片制作 →</button><button class="answer-card" data-action="ascii-image-mode">上传照片生成 ASCII →</button></div><div class="actions"><button class="btn btn-ghost" data-action="choose-mode">返回制作方式</button></div></section>`);
 }
 
 function renderTest() {
@@ -119,22 +103,23 @@ function renderResult() {
   return shell(`<section class="screen result-screen"><p class="eyebrow">YOUR DIGITAL PERSONA</p><h2 class="result-kicker">你的数创人格是</h2>${composer}<div class="persona-title"><h1>${primary.nameZh}</h1><p>${primary.nameEn}</p></div><blockquote>“${primary.description}”</blockquote><p class="secondary-persona">偏向：<strong>${secondary.nameZh}</strong><span>${secondary.nameEn}</span></p><div class="personalize-panel"><div class="personalize-group"><p>角色眼镜</p><div class="chip-options" role="group" aria-label="角色眼镜">${glassesOptions}</div></div><div class="personalize-group"><p>给你的标识牌加一点兴趣彩蛋 <small>推荐选择 ${RECOMMENDED_INTERESTS} 个，最多 ${MAX_INTERESTS} 个</small></p><p class="interest-count">已选 ${state.preferences.interests.length} / ${MAX_INTERESTS}</p><p class="interest-hint">按选择顺序依次放入人格周围的位置 1—4；再次点击可取消。</p><div class="chip-options interest-options" role="group" aria-label="兴趣彩蛋">${interestOptions}</div></div></div><div class="actions"><button class="btn btn-primary" data-action="show-badge">查看我的标识牌<span>→</span></button><button class="btn btn-ghost" data-action="restart-test">重新测试</button><button class="btn btn-ghost" data-action="choose-mode">切换制作方式</button></div></section>`);
 }
 
-function imageLead() {
-  if (state.imageFlow === 'direct') return '图片排版标识牌';
-  if (state.imageFlow === 'ascii') return COPY.badgeLabel;
-  return COPY.badgeLabel;
-}
-
 function renderBadgeScreen() {
   const persona = state.mode === 'image' ? null : state.result.primary;
-  return shell(`<section class="screen badge-screen"><p class="eyebrow">YOUR DCDC BADGE</p><h2>专属标识牌已生成</h2><p class="lead">${escapeHtml(state.profile.name)} · ${persona ? persona.nameZh + ' / ' + persona.nameEn : imageLead()}</p><div class="preview-wrap"><figure class="preview-card">${state.loading ? '<div class="loading-card">正在合成标识牌…</div>' : `<img src="${state.badgeUrl}" alt="${escapeHtml(state.profile.name)}的专属数创标识牌" data-action="zoom">`}</figure><p class="preview-note">点击标识牌查看大图 · 高清文件 2000 × 900 px</p></div><div class="actions"><button class="btn btn-primary" data-action="download" ${state.loading ? 'disabled' : ''}>下载 PNG<span>↓</span></button><button class="btn btn-ghost" data-action="back-result">${state.mode === 'image' ? '返回图片定制' : '返回人格结果'}</button></div></section>`);
+  return shell(`<section class="screen badge-screen"><p class="eyebrow">YOUR DCDC BADGE</p><h2>专属标识牌已生成</h2><p class="lead">${escapeHtml(state.profile.name)} · ${persona ? persona.nameZh + ' / ' + persona.nameEn : COPY.badgeLabel}</p><div class="preview-wrap"><figure class="preview-card">${state.loading ? '<div class="loading-card">正在合成标识牌…</div>' : `<img src="${state.badgeUrl}" alt="${escapeHtml(state.profile.name)}的专属数创标识牌" data-action="zoom">`}</figure><p class="preview-note">点击标识牌查看大图 · 高清文件 2000 × 900 px</p></div><div class="actions"><button class="btn btn-primary" data-action="download" ${state.loading ? 'disabled' : ''}>下载 PNG<span>↓</span></button><button class="btn btn-ghost" data-action="back-result">${state.mode === 'image' ? '返回图片定制' : '返回人格结果'}</button></div></section>`);
 }
 
+function renderImageChoice() {
+  return shell(`<section class="screen"><p class="eyebrow">IMAGE WORKFLOW</p><h2>选择图片制作方式</h2><p class="lead">请选择直接图片排版或 ASCII 生成。</p><div class="stack"><button class="answer-card" data-action="direct-image-mode">上传心仪图片制作 →</button><button class="answer-card" data-action="ascii-image-mode">上传照片生成 ASCII →</button></div></section>`);
+}
+
+function renderMode() {
+  return shell(`<section class="screen"><p class="eyebrow">MAKE IT YOURS</p><h2>选择制作方式</h2><p class="lead">${escapeHtml(state.profile.name)}，用你喜欢的方式制作标识牌。</p><div class="stack"><button class="answer-card" data-action="personality-mode">我要做人格测试 →</button><button class="answer-card" data-action="image-mode">我要上传图片定制我的标识卡 →</button></div><div class="actions"><button class="btn btn-ghost" data-action="edit-profile">返回基础信息</button></div></section>`);
+}
 function render() {
   if (state.step === 'mode') app.innerHTML = renderMode();
-  if (state.step === 'image-branch') app.innerHTML = renderImageBranchChoice();
-  if (state.step === 'image') app.innerHTML = shell(editorMarkup());
+  if (state.step === 'image-choice') app.innerHTML = renderImageChoice();
   if (state.step === 'direct-image') app.innerHTML = shell(directEditorMarkup());
+  if (state.step === 'image') app.innerHTML = shell(editorMarkup());
   if (state.step === 1) app.innerHTML = renderWelcome();
   if (state.step === 2) app.innerHTML = renderProfile();
   if (state.step === 3) app.innerHTML = renderTest();
@@ -163,19 +148,12 @@ async function prepareBadge() {
   state.badgeBlobUrl = '';
   render();
   try {
-    let canvas;
-    if (state.mode === 'image') {
-      canvas = state.imageFlow === 'direct'
-        ? await renderImageBadge({ profile: { ...state.profile, group: effectiveGroup() }, boardItems: getBoardItems() })
-        : await renderImageBadge({ profile: { ...state.profile, group: effectiveGroup() }, artwork: imageState.artwork });
-    } else {
-      canvas = await renderBadge({
-        profile: { ...state.profile, group: effectiveGroup() },
-        persona: state.result.primary,
-        preferences: state.preferences,
-        scale: 1
-      });
-    }
+    const canvas = state.mode === 'image' ? await renderImageBadge({ profile: { ...state.profile, group: effectiveGroup() }, artwork: state.imageFlow==='direct' ? null : imageState.artwork, directItems: state.imageFlow==='direct' ? directItems : null }) : await renderBadge({
+      profile: { ...state.profile, group: effectiveGroup() },
+      persona: state.result.primary,
+      preferences: state.preferences,
+      scale: 1
+    });
     state.badgeUrl = canvas.toDataURL('image/png');
     const badgeBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
     state.badgeBlobUrl = URL.createObjectURL(badgeBlob);
@@ -193,19 +171,10 @@ app.addEventListener('input', event => {
   if (key && !imageState.busy) {
     imageState.config[key] = event.target.type === 'checkbox' ? event.target.checked : event.target.type === 'number' ? Number(event.target.value) : event.target.value;
     releaseArtwork();
-    document.querySelector('[data-action="image-badge"]')?.setAttribute('disabled', 'disabled');
-    document.querySelector('[data-action="download-art"]')?.setAttribute('disabled', 'disabled');
-    const comparison = document.querySelector('#image-comparison');
-    if (comparison) comparison.innerHTML = '';
-    const status = document.querySelector('#image-status');
-    if (status) status.textContent = '参数已修改，请点击“生成 ASCII”。';
-  }
-
-  const boardField = event.target.dataset.boardField;
-  if (boardField) {
-    updateActiveBoardField(boardField, event.target.value);
-    render();
-    return;
+    document.querySelector('[data-action="image-badge"]').disabled = true;
+    document.querySelector('[data-action="download-art"]').disabled = true;
+    document.querySelector('#image-comparison').innerHTML = '';
+    document.querySelector('#image-status').textContent = '参数已修改，请点击“生成 ASCII”。';
   }
 
   if (event.target.id in state.profile) {
@@ -219,53 +188,13 @@ async function imageJob(job) {
   imageState.busy = true; imageState.error = ''; render();
   app.querySelectorAll('input, select, textarea').forEach(element => { element.disabled = true; });
   try { await new Promise(resolve => setTimeout(resolve, 30)); await job(); }
-  catch (error) { imageState.error = error.message; }
+  catch(error) { imageState.error = error.message; }
   finally { imageState.busy = false; render(); }
 }
 
-async function directJob(job) {
-  if (directImageState.busy) return;
-  directImageState.busy = true;
-  render();
-  try { await new Promise(resolve => setTimeout(resolve, 30)); await job(); }
-  catch (error) { directImageState.error = error.message; }
-  finally { directImageState.busy = false; render(); }
-}
-
-app.addEventListener('pointerdown', event => {
-  const draggable = event.target.closest('[data-board-draggable]');
-  if (!draggable || state.step !== 'direct-image') return;
-  const stage = document.querySelector('#board-stage');
-  if (!stage) return;
-  beginBoardDrag(draggable.dataset.boardDraggable, event.clientX, event.clientY, stage.getBoundingClientRect());
-  event.preventDefault();
-  render();
-});
-
-app.addEventListener('pointermove', event => {
-  if (state.step === 'direct-image' && directImageState.drag) {
-    if (updateBoardDrag(event.clientX, event.clientY)) render();
-  }
-});
-
-app.addEventListener('pointerup', () => {
-  if (directImageState.drag) endBoardDrag();
-});
-app.addEventListener('pointercancel', () => {
-  if (directImageState.drag) endBoardDrag();
-});
-
 app.addEventListener('change', async event => {
-  if (event.target.id === 'image-file' && event.target.files[0]) {
-    const file = event.target.files[0];
-    await imageJob(() => handleImageFile(file));
-    event.target.value = '';
-  }
-  if (event.target.id === 'board-files' && event.target.files.length) {
-    const files = [...event.target.files];
-    await directJob(() => handleBoardFiles(files));
-    event.target.value = '';
-  }
+  if (event.target.id === 'direct-files' && event.target.files.length) { await handleDirectFiles([...event.target.files]); render(); return; }
+  if (event.target.id === 'image-file' && event.target.files[0]) { const file = event.target.files[0]; await imageJob(() => handleImageFile(file)); }
   if (event.target.id === 'split-view') { imageState.split = event.target.checked; render(); }
 
   if (event.target.id === 'group') {
@@ -283,26 +212,6 @@ app.addEventListener('click', async event => {
     render();
     return;
   }
-
-  const boardSelect = event.target.closest('[data-board-select]');
-  if (boardSelect && state.step === 'direct-image') {
-    selectBoardItem(boardSelect.dataset.boardSelect);
-    render();
-    return;
-  }
-  const boardRemove = event.target.closest('[data-board-remove]');
-  if (boardRemove && state.step === 'direct-image') {
-    removeBoardItem(boardRemove.dataset.boardRemove);
-    render();
-    return;
-  }
-  const boardMove = event.target.closest('[data-board-move]');
-  if (boardMove && state.step === 'direct-image') {
-    if (boardState.active) moveBoardItem(boardState.active, boardMove.dataset.boardMove);
-    render();
-    return;
-  }
-
   const interest = event.target.closest('[data-interest]');
   if (interest) {
     state.preferences.interests = toggleInterestSelection(state.preferences.interests, interest.dataset.interest);
@@ -332,26 +241,15 @@ app.addEventListener('click', async event => {
 
   const action = event.target.closest('[data-action]');
   if (!action || state.loading || imageState.busy) return;
-
   if (action.dataset.action === 'choose-mode') { state.step = 'mode'; render(); }
   if (action.dataset.action === 'edit-profile') { state.step = 2; render(); }
-  if (action.dataset.action === 'personality-mode') { state.mode = 'personality'; state.imageFlow = null; state.step = state.result ? 4 : 3; render(); }
-  if (action.dataset.action === 'image-mode') { state.mode = 'image'; state.step = 'image-branch'; render(); }
-  if (action.dataset.action === 'direct-image-mode') { state.mode = 'image'; state.imageFlow = 'direct'; state.step = 'direct-image'; render(); }
-  if (action.dataset.action === 'ascii-image-mode') { state.mode = 'image'; state.imageFlow = 'ascii'; state.step = 'image'; render(); }
-  if (action.dataset.action === 'back-image-branch') { state.step = 'image-branch'; render(); }
-
+  if (action.dataset.action === 'personality-mode') { state.mode = 'personality'; state.step = state.result ? 4 : 3; render(); }
+  if (action.dataset.action === 'image-mode') { state.mode = 'image'; state.step = 'image-choice'; render(); }
+  if (action.dataset.action === 'direct-image-mode') { state.mode = 'image'; state.imageFlow='direct'; state.step='direct-image'; render(); }
+  if (action.dataset.action === 'ascii-image-mode') { state.mode = 'image'; state.imageFlow='ascii'; state.step='image'; render(); }
   if (action.dataset.action === 'convert-image') { await imageJob(() => convertImage()); }
-  if (action.dataset.action === 'image-badge') {
-    const ready = state.imageFlow === 'direct' ? getBoardItems().length : imageState.artwork;
-    if (ready) { state.step = 5; await prepareBadge(); }
-  }
-  if (action.dataset.action === 'download-art' && imageState.url) {
-    const a = document.createElement('a');
-    a.href = imageState.url;
-    a.download = 'DCDC-透明字符画.png';
-    a.click();
-  }
+  if (action.dataset.action === 'image-badge' && imageState.artwork) { state.step = 5; await prepareBadge(); }
+  if (action.dataset.action === 'download-art' && imageState.url) { const a = document.createElement('a'); a.href = imageState.url; a.download = 'DCDC-透明字符画.png'; a.click(); }
 
   if (action.dataset.action === 'start') { state.step = 2; render(); }
   if (action.dataset.action === 'back') { state.step = 1; render(); }
@@ -380,17 +278,12 @@ app.addEventListener('click', async event => {
     state.step = 5;
     await prepareBadge();
   }
-  if (action.dataset.action === 'back-result') {
-    if (state.mode === 'image') state.step = state.imageFlow === 'direct' ? 'direct-image' : 'image';
-    else state.step = 4;
-    render();
-  }
+  if (action.dataset.action === 'back-result') { state.step = state.mode === 'image' ? 'image' : 4; render(); }
   if (action.dataset.action === 'zoom') { state.lightbox = true; render(); }
   if (action.dataset.action === 'close-zoom') { state.lightbox = false; render(); }
   if (action.dataset.action === 'download' && state.badgeBlobUrl) {
     const link = document.createElement('a');
-    const suffix = state.mode === 'image' ? (state.imageFlow === 'direct' ? 'ImageBoard' : 'ImageAscii') : state.result.primary.nameEn;
-    link.download = `DCDC-${state.profile.name}-${suffix}.png`;
+    link.download = `DCDC-${state.profile.name}-${state.mode === 'image' ? 'Image' : state.result.primary.nameEn}.png`;
     link.href = state.badgeBlobUrl;
     document.body.appendChild(link);
     link.click();
@@ -402,7 +295,4 @@ window.__DCDC__ = { QUESTIONS, scorePersonality, ARCHETYPE_BY_ID, createPersonaS
 if (DEBUG_MODE) mountDebugPanel(app);
 else render();
 
-window.addEventListener('pagehide', () => {
-  if (state.badgeBlobUrl) URL.revokeObjectURL(state.badgeBlobUrl);
-  endBoardDrag();
-});
+window.addEventListener('pagehide', () => { if (state.badgeBlobUrl) URL.revokeObjectURL(state.badgeBlobUrl); });
