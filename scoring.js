@@ -1,4 +1,4 @@
-import { ARCHETYPES } from './archetypes.js';
+import { ARCHETYPES } from '.personality/scoring.js';
 
 export const DIMENSIONS = ['structure', 'focus', 'connection', 'drive'];
 export const INITIAL_SCORES = { structure: 0.5, focus: 0.5, connection: 0.5, drive: 0.5 };
