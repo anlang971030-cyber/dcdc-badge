@@ -808,3 +808,12 @@ input[type=color] { height:48px; }
     grid-template-columns: 1fr;
   }
 }
+
+/* image workflow refinement */
+.image-choice-stack .answer-card { min-height: 150px; gap: 16px; }
+.image-choice-stack .answer-card span { font-size: 24px; font-weight: 700; }
+.image-choice-stack .answer-card small { display:block; color:#6b8295; font-size:14px; line-height:1.8; }
+.direct-layout-stack { display:grid; grid-template-columns:1fr; gap:18px; }
+.direct-layout-stack .direct-board { width:100%; aspect-ratio:20/9; }
+.direct-bottom-panel { width:100%; }
+@media(max-width:900px){ .image-choice-stack .answer-card span{font-size:20px;} }
