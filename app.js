@@ -287,6 +287,7 @@ app.addEventListener('click', async event => {
   if (action.dataset.action === 'edit-profile') { state.step = 2; render(); }
   if (action.dataset.action === 'personality-mode') { state.mode = 'personality'; state.step = state.result ? 4 : 3; render(); }
   if (action.dataset.action === 'image-mode') { state.mode = 'image'; state.step = 'image'; render(); }
+  if (action.dataset.action === 'select-image-flow') { imageState.flow = action.dataset.flow || 'ascii'; state.mode = 'image'; state.step = 'image'; render(); }
   if (action.dataset.action === 'clear-selection') { clearSelection(); render(); }
   if (action.dataset.action === 'convert-image') { await imageJob(() => convertImage()); }
   if (action.dataset.action === 'image-badge' && imageState.artwork) { state.step = 5; await prepareBadge(); }
