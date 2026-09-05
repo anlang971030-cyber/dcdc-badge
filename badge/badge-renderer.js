@@ -253,16 +253,37 @@ function drawBadgeText(context, profile, persona, text, seed) {
   drawSpacedText(context, `DCDC DIGITAL ID · ${String(seed).padStart(10, '0')}`, text.serial.x, text.serial.y, 3.2);
   context.globalAlpha = 1;
 }
-
-export async function renderImageBadge({ profile, artwork }) {
+export async function renderImageBadge({ profile, artwork, boardItems = [] }) {
   const canvas = document.createElement('canvas');
-  canvas.width = 2000; canvas.height = 900;
+  canvas.width = 2000;
+  canvas.height = 900;
   const context = canvas.getContext('2d');
   context.drawImage(await loadImage('./assets/template-base.png'), 0, 0, 2000, 900);
   const area = { x: 990, y: 80, width: 960, height: 770 };
-  const ratio = Math.min(area.width / artwork.width, area.height / artwork.height);
-  const w = artwork.width * ratio, h = artwork.height * ratio;
-  context.drawImage(artwork, area.x + (area.width-w)/2, area.y + (area.height-h)/2, w, h);
+
+  context.save();
+  context.beginPath();
+  context.rect(area.x, area.y, area.width, area.height);
+  context.clip();
+
+  if (boardItems?.length) {
+    for (const item of boardItems) {
+      const source = item.canvas || item.image || artwork;
+      if (!source) continue;
+      const drawWidth = source.width * item.baseScale * item.scale;
+      const drawHeight = source.height * item.baseScale * item.scale;
+      const centerX = area.x + item.x * area.width;
+      const centerY = area.y + item.y * area.height;
+      context.drawImage(source, centerX - drawWidth / 2, centerY - drawHeight / 2, drawWidth, drawHeight);
+    }
+  } else if (artwork) {
+    const ratio = Math.min(area.width / artwork.width, area.height / artwork.height);
+    const w = artwork.width * ratio;
+    const h = artwork.height * ratio;
+    context.drawImage(artwork, area.x + (area.width - w) / 2, area.y + (area.height - h) / 2, w, h);
+  }
+
+  context.restore();
   drawBadgeText(context, profile, null, textLayout(), seedFor(profile, 'image'));
   return canvas;
 }
