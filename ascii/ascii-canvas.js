@@ -4,9 +4,9 @@ export const DEFAULTS = Object.freeze({
   lineHeight: 9,
   alphaThreshold: 230,
   preset: 'CUSTOM',
-  customText: 'Beautiful is better than ugly
+  customText: `Beautiful is better than ugly
 Explicit is better than implicit
-Simple is better than complex',
+Simple is better than complex`,
   colorMode: 'ORIGINAL',
   customColor: '#2E6CF6',
   invert: false
