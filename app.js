@@ -1,5 +1,5 @@
 import { COPY } from './ascii/ascii-canvas.js';
-import { imageState, editorMarkup, handleImageFile, convertImage, releaseArtwork, beginSelection, updateSelection, endSelection, clearSelection, setUseSelection } from './ascii/image-editor.js';
+import { imageState, editorMarkup, handleImageFile, convertImage, releaseArtwork, beginSelection, updateSelection, endSelection, clearSelection, setUseSelection, selectImageFlow } from './ascii/image-editor.js';
 import { renderImageBadge } from './badge/badge-renderer.js?v=20260905-4';
 import { QUESTIONS } from './personality/questions.js';
 import { scorePersonality } from './personality/scoring.js';
