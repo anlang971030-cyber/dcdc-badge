@@ -275,7 +275,11 @@ export async function renderImageBadge({ profile, artwork, boardItems = [] }) {
       const drawHeight = source.height * (item.baseScale || 1) * (item.scale || 1);
       const centerX = area.x + area.width * (item.x ?? 0.5);
       const centerY = area.y + area.height * (item.y ?? 0.52);
-      context.drawImage(source, centerX - drawWidth / 2, centerY - drawHeight / 2, drawWidth, drawHeight);
+      context.save();
+      context.translate(centerX, centerY);
+      context.rotate(((item.rotation || 0) * Math.PI) / 180);
+      context.drawImage(source, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+      context.restore();
     }
   } else if (artwork) {
     const ratio = Math.min(area.width / artwork.width, area.height / artwork.height);
