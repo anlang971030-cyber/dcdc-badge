@@ -1,5 +1,5 @@
 import { COPY } from './ascii/ascii-canvas.js';
-import { imageState, editorMarkup, handleImageFile, convertImage, releaseArtwork } from './ascii/image-editor.js';
+import { imageState, editorMarkup, handleImageFiles, convertImage, releaseArtwork, updateActiveConfig, selectSourceItem, selectArtworkItem, updateArtworkLayout, setArtworkPosition, moveArtworkLayer, removeArtworkItem, refreshAsciiEditorDom, syncAsciiEditorDom, getGeneratedBoardItems, downloadActiveArtwork } from './ascii/image-editor.js';
 import { directEditorMarkup, handleDirectFiles, directItems, updateDirectItem, removeDirectItem, moveDirectItem, selectDirectItem, getActiveDirectItem, setDirectPosition, refreshDirectEditorDom, syncDirectEditorDom } from './ascii/direct-image-editor.js';
 import { renderImageBadge } from './badge/badge-renderer.js?v=20260905-4';
 import { QUESTIONS } from './personality/questions.js';
@@ -34,6 +34,7 @@ const state = {
 };
 
 const directDrag = { id: null, rect: null, startX: 0, startY: 0, originX: 0, originY: 0 };
+const asciiDrag = { id: null, rect: null, startX: 0, startY: 0, originX: 0, originY: 0 };
 
 function safeParse(value) {
   try { return JSON.parse(value); } catch { return null; }
@@ -150,7 +151,7 @@ async function prepareBadge() {
   state.badgeBlobUrl = '';
   render();
   try {
-    const canvas = state.mode === 'image' ? await renderImageBadge({ profile: { ...state.profile, group: effectiveGroup() }, artwork: state.imageFlow === 'direct' ? null : imageState.artwork, boardItems: state.imageFlow === 'direct' ? directItems : [] }) : await renderBadge({
+    const canvas = state.mode === 'image' ? await renderImageBadge({ profile: { ...state.profile, group: effectiveGroup() }, artwork: state.imageFlow === 'direct' ? null : imageState.artwork, boardItems: state.imageFlow === 'direct' ? directItems : (state.imageFlow === 'ascii' ? getGeneratedBoardItems() : []) }) : await renderBadge({
       profile: { ...state.profile, group: effectiveGroup() },
       persona: state.result.primary,
       preferences: state.preferences,
@@ -171,12 +172,18 @@ async function prepareBadge() {
 app.addEventListener('input', event => {
   const key = event.target.dataset.config;
   if (key && !imageState.busy) {
-    imageState.config[key] = event.target.type === 'checkbox' ? event.target.checked : event.target.type === 'number' ? Number(event.target.value) : event.target.value;
-    releaseArtwork();
-    document.querySelector('[data-action="image-badge"]').disabled = true;
-    document.querySelector('[data-action="download-art"]').disabled = true;
-    document.querySelector('#image-comparison').innerHTML = '';
-    document.querySelector('#image-status').textContent = '参数已修改，请点击“生成 ASCII”。';
+    const value = event.target.type === 'checkbox' ? event.target.checked : event.target.type === 'number' ? Number(event.target.value) : event.target.value;
+    updateActiveConfig(key, value);
+    refreshAsciiEditorDom();
+    return;
+  }
+
+  const asciiLayoutField = event.target.dataset.asciiLayout;
+  const asciiLayoutId = event.target.dataset.asciiId;
+  if (asciiLayoutField && asciiLayoutId) {
+    updateArtworkLayout(asciiLayoutId, asciiLayoutField, event.target.value);
+    syncAsciiEditorDom();
+    return;
   }
 
   const directField = event.target.dataset.directField;
@@ -204,14 +211,32 @@ async function imageJob(job) {
 
 app.addEventListener('change', async event => {
   if (event.target.id === 'direct-files' && event.target.files.length) { await handleDirectFiles([...event.target.files]); event.target.value=''; refreshDirectEditorDom(); return; }
-  if (event.target.id === 'image-file' && event.target.files[0]) { const file = event.target.files[0]; await imageJob(() => handleImageFile(file)); }
-  if (event.target.id === 'split-view') { imageState.split = event.target.checked; render(); }
+  if (event.target.id === 'image-file' && event.target.files.length) { const files = [...event.target.files]; await imageJob(() => handleImageFiles(files)); event.target.value=''; refreshAsciiEditorDom(); return; }
+  if (event.target.id === 'split-view') { imageState.split = event.target.checked; refreshAsciiEditorDom(); return; }
 
   if (event.target.id === 'group') {
     state.profile.group = event.target.value;
     persist();
     render();
   }
+});
+
+app.addEventListener('pointerdown', event => {
+  const item = event.target.closest('[data-ascii-draggable]');
+  if (!item) return;
+  const stage = document.querySelector('#ascii-board');
+  if (!stage) return;
+  selectArtworkItem(item.dataset.asciiDraggable);
+  const active = getGeneratedBoardItems().find(entry => entry.id === Number(item.dataset.asciiDraggable));
+  if (!active) return;
+  asciiDrag.id = active.id;
+  asciiDrag.rect = stage.getBoundingClientRect();
+  asciiDrag.startX = event.clientX;
+  asciiDrag.startY = event.clientY;
+  asciiDrag.originX = active.x;
+  asciiDrag.originY = active.y;
+  event.preventDefault();
+  syncAsciiEditorDom();
 });
 
 app.addEventListener('pointerdown', event => {
@@ -233,6 +258,15 @@ app.addEventListener('pointerdown', event => {
 });
 
 app.addEventListener('pointermove', event => {
+  if (asciiDrag.id && asciiDrag.rect) {
+    const dx = (event.clientX - asciiDrag.startX) / asciiDrag.rect.width;
+    const dy = (event.clientY - asciiDrag.startY) / asciiDrag.rect.height;
+    const x = asciiDrag.originX + dx * (2000 / 960);
+    const y = asciiDrag.originY + dy * (900 / 770);
+    setArtworkPosition(asciiDrag.id, x, y);
+    syncAsciiEditorDom();
+    return;
+  }
   if (!directDrag.id || !directDrag.rect) return;
   const dx = (event.clientX - directDrag.startX) / directDrag.rect.width;
   const dy = (event.clientY - directDrag.startY) / directDrag.rect.height;
@@ -245,6 +279,8 @@ app.addEventListener('pointermove', event => {
 function stopDirectDrag() {
   directDrag.id = null;
   directDrag.rect = null;
+  asciiDrag.id = null;
+  asciiDrag.rect = null;
 }
 app.addEventListener('pointerup', stopDirectDrag);
 app.addEventListener('pointercancel', stopDirectDrag);
@@ -255,6 +291,18 @@ app.addEventListener('click', async event => {
     state.preferences.glasses = glasses.dataset.glasses;
     persist();
     render();
+    return;
+  }
+  const asciiSourceSelect = event.target.closest('[data-ascii-source-select]');
+  if (asciiSourceSelect) {
+    selectSourceItem(asciiSourceSelect.dataset.asciiSourceSelect);
+    refreshAsciiEditorDom();
+    return;
+  }
+  const asciiArtSelect = event.target.closest('[data-ascii-art-select]');
+  if (asciiArtSelect) {
+    selectArtworkItem(asciiArtSelect.dataset.asciiArtSelect);
+    refreshAsciiEditorDom();
     return;
   }
   const directSelect = event.target.closest('[data-direct-select]');
@@ -302,14 +350,18 @@ app.addEventListener('click', async event => {
   if (action.dataset.action === 'direct-remove') { const active = getActiveDirectItem(); if (active) removeDirectItem(active.id); refreshDirectEditorDom(); }
   if (action.dataset.action === 'direct-layer-up') { const active = getActiveDirectItem(); if (active) moveDirectItem(active.id, 'up'); refreshDirectEditorDom(); }
   if (action.dataset.action === 'direct-layer-down') { const active = getActiveDirectItem(); if (active) moveDirectItem(active.id, 'down'); refreshDirectEditorDom(); }
-  if (action.dataset.action === 'convert-image') { await imageJob(() => convertImage()); }
+  if (action.dataset.action === 'ascii-layer-up') { moveArtworkLayer('up'); refreshAsciiEditorDom(); }
+  if (action.dataset.action === 'ascii-layer-down') { moveArtworkLayer('down'); refreshAsciiEditorDom(); }
+  if (action.dataset.action === 'ascii-remove-art') { removeArtworkItem(); refreshAsciiEditorDom(); }
+  if (action.dataset.action === 'convert-image') { await imageJob(() => convertImage()); refreshAsciiEditorDom(); }
   if (action.dataset.action === 'image-badge') {
-    if ((state.imageFlow === 'direct' && directItems.length) || (state.imageFlow !== 'direct' && imageState.artwork)) {
+    const ready = state.imageFlow === 'direct' ? directItems.length : (state.imageFlow === 'ascii' ? getGeneratedBoardItems().length : 0);
+    if (ready) {
       state.step = 5;
       await prepareBadge();
     }
   }
-  if (action.dataset.action === 'download-art' && imageState.url) { const a = document.createElement('a'); a.href = imageState.url; a.download = 'DCDC-透明字符画.png'; a.click(); }
+  if (action.dataset.action === 'download-art') { downloadActiveArtwork(); }
 
   if (action.dataset.action === 'start') { state.step = 2; render(); }
   if (action.dataset.action === 'back') { state.step = 1; render(); }
