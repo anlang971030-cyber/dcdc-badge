@@ -1,6 +1,5 @@
 import { COPY } from './ascii/ascii-canvas.js';
 import { imageState, editorMarkup, handleImageFile, convertImage, releaseArtwork } from './ascii/image-editor.js';
-import { directEditorMarkup, handleDirectFiles, directItems, updateDirectItem, removeDirectItem, moveDirectItem } from './ascii/direct-image-editor.js';
 import { renderImageBadge } from './badge/badge-renderer.js?v=20260905-4';
 import { QUESTIONS } from './personality/questions.js';
 import { scorePersonality } from './personality/scoring.js';
@@ -112,22 +111,23 @@ function renderImageChoice() {
   return shell(`<section class="screen"><p class="eyebrow">IMAGE WORKFLOW</p><h2>选择图片制作方式</h2><p class="lead">请选择直接图片排版或 ASCII 生成。</p><div class="stack"><button class="answer-card" data-action="direct-image-mode">上传心仪图片制作 →</button><button class="answer-card" data-action="ascii-image-mode">上传照片生成 ASCII →</button></div></section>`);
 }
 
+function renderDirectImage() {
+  return shell(`<section class="screen"><p class="eyebrow">DIRECT IMAGE</p><h2>上传心仪图片制作</h2><p class="lead">功能模块加载中。</p><div class="field"><label>上传图片</label><input id="direct-image-file" type="file" multiple accept="image/*"></div><div id="direct-preview"></div><div class="actions"><button class="btn btn-ghost" data-action="choose-mode">返回</button></div></section>`);
+}
+
 function renderMode() {
   return shell(`<section class="screen"><p class="eyebrow">MAKE IT YOURS</p><h2>选择制作方式</h2><p class="lead">${escapeHtml(state.profile.name)}，用你喜欢的方式制作标识牌。</p><div class="stack"><button class="answer-card" data-action="personality-mode">我要做人格测试 →</button><button class="answer-card" data-action="image-mode">我要上传图片定制我的标识卡 →</button></div><div class="actions"><button class="btn btn-ghost" data-action="edit-profile">返回基础信息</button></div></section>`);
 }
 function render() {
   if (state.step === 'mode') app.innerHTML = renderMode();
   if (state.step === 'image-choice') app.innerHTML = renderImageChoice();
-  if (state.step === 'direct-image') app.innerHTML = shell(directEditorMarkup());
   if (state.step === 'image') app.innerHTML = shell(editorMarkup());
+  if (state.step === 'direct-image') app.innerHTML = renderDirectImage();
   if (state.step === 1) app.innerHTML = renderWelcome();
   if (state.step === 2) app.innerHTML = renderProfile();
   if (state.step === 3) app.innerHTML = renderTest();
   if (state.step === 4) app.innerHTML = renderResult();
   if (state.step === 5) app.innerHTML = renderBadgeScreen();
-  if (state.lightbox && state.badgeUrl) {
-    app.insertAdjacentHTML('beforeend', `<div class="lightbox" role="dialog" aria-modal="true" aria-label="标识牌大图"><button class="lightbox-close" aria-label="关闭" data-action="close-zoom">×</button><img src="${state.badgeUrl}" alt="高清标识牌"></div>`);
-  }
 }
 
 function validateProfile() {
@@ -196,6 +196,7 @@ app.addEventListener('change', async event => {
   if (event.target.id === 'direct-files' && event.target.files.length) { await handleDirectFiles([...event.target.files]); render(); return; }
   if (event.target.id === 'image-file' && event.target.files[0]) { const file = event.target.files[0]; await imageJob(() => handleImageFile(file)); }
   if (event.target.id === 'split-view') { imageState.split = event.target.checked; render(); }
+  if (event.target.id === 'direct-image-file') { const files=[...event.target.files]; import('./image-layout/editor.js').then(m=>m.loadImages(files)); }
 
   if (event.target.id === 'group') {
     state.profile.group = event.target.value;
