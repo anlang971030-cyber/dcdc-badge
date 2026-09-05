@@ -1,11 +1,32 @@
 import { COPY } from './ascii/ascii-canvas.js';
-import { imageState, editorMarkup, handleImageFile, convertImage, releaseArtwork, beginSelection, updateSelection, endSelection, clearSelection, setUseSelection } from './ascii/image-editor.js';
-import { renderImageBadge } from './badge/badge-renderer.js?v=20260905-4';
+import {
+  imageState,
+  editorMarkup,
+  handleImageFile,
+  handleTransparentFiles,
+  convertImage,
+  releaseArtwork,
+  beginSelection,
+  updateSelection,
+  endSelection,
+  clearSelection,
+  setUseSelection,
+  selectImageFlow,
+  resetImageFlow,
+  chooseBoardItem,
+  removeBoardItem,
+  updateBoardItem,
+  beginBoardDrag,
+  updateBoardDrag,
+  endBoardDrag,
+  getBoardItems
+} from './ascii/image-editor.js';
+import { renderImageBadge } from './badge/badge-renderer.js?v=20260906-imgflow';
 import { QUESTIONS } from './personality/questions.js';
 import { scorePersonality } from './personality/scoring.js';
 import { ARCHETYPE_BY_ID } from './personality/archetypes.js';
 import { createPersonaSelection } from './personality/persona-variants.js';
-import { INTEREST_ASSETS, MAX_INTERESTS, RECOMMENDED_INTERESTS, sanitizeInterests, toggleInterestSelection } from './interests/interest-assets.js?v=20260905-4';
+import { INTEREST_ASSETS, MAX_INTERESTS, RECOMMENDED_INTERESTS, toggleInterestSelection } from './interests/interest-assets.js?v=20260905-4';
 import { renderPersonaComposer } from './components/persona-composer.js?v=20260905-4';
 import { mountDebugPanel } from './debug-panel.js?v=20260905-4';
 import { renderBadge } from './badge/badge-renderer.js?v=20260905-4';
@@ -89,8 +110,7 @@ function renderTest() {
 function renderResult() {
   const { primary, secondary } = state.result;
   const composer = renderPersonaComposer({ profile: { ...state.profile, group: effectiveGroup() }, persona: primary, interests: [] });
-  const glassesOptions = [['none', '无'], ['square', '方框'], ['round', '圆框']]
-    .map(([id, label]) => `<button class="personalize-chip" data-glasses="${id}" aria-pressed="${state.preferences.glasses === id}">${label}</button>`).join('');
+  const glassesOptions = [['none', '无'], ['square', '方框'], ['round', '圆框']].map(([id, label]) => `<button class="personalize-chip" data-glasses="${id}" aria-pressed="${state.preferences.glasses === id}">${label}</button>`).join('');
   const interestOptions = INTEREST_ASSETS.map(item => {
     const selectedIndex = state.preferences.interests.indexOf(item.id);
     const selected = selectedIndex >= 0;
@@ -103,12 +123,13 @@ function renderResult() {
 
 function renderBadgeScreen() {
   const persona = state.mode === 'image' ? null : state.result.primary;
-  return shell(`<section class="screen badge-screen"><p class="eyebrow">YOUR DCDC BADGE</p><h2>专属标识牌已生成</h2><p class="lead">${escapeHtml(state.profile.name)} · ${persona ? persona.nameZh + ' / ' + persona.nameEn : COPY.badgeLabel}</p><div class="preview-wrap"><figure class="preview-card">${state.loading ? '<div class="loading-card">正在合成标识牌…</div>' : `<img src="${state.badgeUrl}" alt="${escapeHtml(state.profile.name)}的专属数创标识牌" data-action="zoom">`}</figure><p class="preview-note">点击标识牌查看大图 · 高清文件 2000 × 900 px</p></div><div class="actions"><button class="btn btn-primary" data-action="download" ${state.loading ? 'disabled' : ''}>下载 PNG<span>↓</span></button><button class="btn btn-ghost" data-action="back-result">${state.mode === 'image' ? '返回图片定制' : '返回人格结果'}</button></div></section>`);
+  return shell(`<section class="screen badge-screen"><p class="eyebrow">YOUR DCDC BADGE</p><h2>专属标识牌已生成</h2><p class="lead">${escapeHtml(state.profile.name)} · ${persona ? `${persona.nameZh} / ${persona.nameEn}` : COPY.badgeLabel}</p><div class="preview-wrap"><figure class="preview-card">${state.loading ? '<div class="loading-card">正在合成标识牌…</div>' : `<img src="${state.badgeUrl}" alt="${escapeHtml(state.profile.name)}的专属数创标识牌" data-action="zoom">`}</figure><p class="preview-note">点击标识牌查看大图 · 高清文件 2000 × 900 px</p></div><div class="actions"><button class="btn btn-primary" data-action="download" ${state.loading ? 'disabled' : ''}>下载 PNG<span>↓</span></button><button class="btn btn-ghost" data-action="back-result">${state.mode === 'image' ? '返回图片定制' : '返回人格结果'}</button></div></section>`);
 }
 
 function renderMode() {
   return shell(`<section class="screen"><p class="eyebrow">MAKE IT YOURS</p><h2>选择制作方式</h2><p class="lead">${escapeHtml(state.profile.name)}，用你喜欢的方式制作标识牌。</p><div class="stack"><button class="answer-card" data-action="personality-mode">我要做人格测试 →</button><button class="answer-card" data-action="image-mode">我要上传图片定制我的标识卡 →</button></div><div class="actions"><button class="btn btn-ghost" data-action="edit-profile">返回基础信息</button></div></section>`);
 }
+
 function render() {
   if (state.step === 'mode') app.innerHTML = renderMode();
   if (state.step === 'image') app.innerHTML = shell(editorMarkup());
@@ -140,12 +161,9 @@ async function prepareBadge() {
   state.badgeBlobUrl = '';
   render();
   try {
-    const canvas = state.mode === 'image' ? await renderImageBadge({ profile: { ...state.profile, group: effectiveGroup() }, artwork: imageState.artwork }) : await renderBadge({
-      profile: { ...state.profile, group: effectiveGroup() },
-      persona: state.result.primary,
-      preferences: state.preferences,
-      scale: 1
-    });
+    const canvas = state.mode === 'image'
+      ? await renderImageBadge({ profile: { ...state.profile, group: effectiveGroup() }, artwork: imageState.artwork, boardItems: getBoardItems() })
+      : await renderBadge({ profile: { ...state.profile, group: effectiveGroup() }, persona: state.result.primary, preferences: state.preferences, scale: 1 });
     state.badgeUrl = canvas.toDataURL('image/png');
     const badgeBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
     state.badgeBlobUrl = URL.createObjectURL(badgeBlob);
@@ -162,11 +180,21 @@ app.addEventListener('input', event => {
   const key = event.target.dataset.config;
   if (key && !imageState.busy) {
     imageState.config[key] = event.target.type === 'checkbox' ? event.target.checked : event.target.type === 'number' ? Number(event.target.value) : event.target.value;
-    releaseArtwork();
-    document.querySelector('[data-action="image-badge"]').disabled = true;
-    document.querySelector('[data-action="download-art"]').disabled = true;
-    document.querySelector('#image-comparison').innerHTML = '';
-    document.querySelector('#image-status').textContent = '参数已修改，请点击“应用效果”。';
+    if (imageState.url) {
+      URL.revokeObjectURL(imageState.url);
+      imageState.url = '';
+      imageState.artwork = null;
+    }
+    const status = document.querySelector('#image-status');
+    if (status) status.textContent = '参数已修改，请重新生成 ASCII 图层。';
+    render();
+    return;
+  }
+
+  const boardControl = event.target.dataset.boardControl;
+  if (boardControl) {
+    updateBoardItem(boardControl, event.target.value);
+    render();
   }
 
   if (event.target.id in state.profile) {
@@ -177,24 +205,47 @@ app.addEventListener('input', event => {
 
 async function imageJob(job) {
   if (imageState.busy) return;
-  imageState.busy = true; imageState.error = ''; render();
-  app.querySelectorAll('input, select, textarea').forEach(element => { element.disabled = true; });
-  try { await new Promise(resolve => setTimeout(resolve, 30)); await job(); }
-  catch(error) { imageState.error = error.message; }
-  finally { imageState.busy = false; render(); }
+  imageState.busy = true;
+  imageState.error = '';
+  render();
+  app.querySelectorAll('input, select, textarea, button').forEach(element => { element.disabled = true; });
+  try {
+    await new Promise(resolve => setTimeout(resolve, 30));
+    await job();
+  } catch (error) {
+    imageState.error = error.message;
+  } finally {
+    imageState.busy = false;
+    render();
+  }
 }
 
 function selectionPoint(event) {
   const stage = document.querySelector('#selection-stage');
   if (!stage) return null;
   const rect = stage.getBoundingClientRect();
-  return {
-    x: (event.clientX - rect.left) / rect.width,
-    y: (event.clientY - rect.top) / rect.height
-  };
+  return { x: (event.clientX - rect.left) / rect.width, y: (event.clientY - rect.top) / rect.height };
+}
+
+function boardPoint(event) {
+  const stage = document.querySelector('#board-stage');
+  if (!stage) return null;
+  const rect = stage.getBoundingClientRect();
+  return { x: (event.clientX - rect.left) / rect.width, y: (event.clientY - rect.top) / rect.height };
 }
 
 app.addEventListener('pointerdown', event => {
+  const boardItem = event.target.closest('.board-item[data-board-item]');
+  if (boardItem) {
+    const point = boardPoint(event);
+    if (point) {
+      event.preventDefault();
+      beginBoardDrag(boardItem.dataset.boardItem, point.x, point.y);
+      render();
+      return;
+    }
+  }
+
   if (event.target.closest('#selection-stage')) {
     const point = selectionPoint(event);
     if (point) {
@@ -206,6 +257,20 @@ app.addEventListener('pointerdown', event => {
 });
 
 app.addEventListener('pointermove', event => {
+  if (imageState.draggingBoardId) {
+    const point = boardPoint(event);
+    if (point) {
+      updateBoardDrag(point.x, point.y);
+      const item = getBoardItems().find(entry => entry.id === imageState.draggingBoardId);
+      const active = document.querySelector(`.board-item[data-board-item="${imageState.draggingBoardId}"]`);
+      if (item && active) {
+        active.style.left = `${item.x * 100}%`;
+        active.style.top = `${item.y * 100}%`;
+      }
+    }
+    return;
+  }
+
   if (imageState.selecting) {
     const point = selectionPoint(event);
     if (point) {
@@ -226,6 +291,11 @@ app.addEventListener('pointermove', event => {
 });
 
 app.addEventListener('pointerup', event => {
+  if (imageState.draggingBoardId) {
+    endBoardDrag();
+    render();
+    return;
+  }
   if (imageState.selecting) {
     const point = selectionPoint(event);
     if (point) endSelection(point.x, point.y);
@@ -234,7 +304,16 @@ app.addEventListener('pointerup', event => {
 });
 
 app.addEventListener('change', async event => {
-  if (event.target.id === 'image-file' && event.target.files[0]) { const file = event.target.files[0]; await imageJob(() => handleImageFile(file)); }
+  if (event.target.id === 'image-file' && event.target.files?.length) {
+    const files = Array.from(event.target.files);
+    await imageJob(() => handleImageFile(files));
+    event.target.value = '';
+  }
+  if (event.target.id === 'transparent-files' && event.target.files?.length) {
+    const files = Array.from(event.target.files);
+    await imageJob(() => handleTransparentFiles(files));
+    event.target.value = '';
+  }
   if (event.target.id === 'split-view') { imageState.split = event.target.checked; render(); }
   if (event.target.id === 'use-selection') { setUseSelection(event.target.checked); clearSelection(); render(); }
 
@@ -260,6 +339,14 @@ app.addEventListener('click', async event => {
     render();
     return;
   }
+
+  const assetChip = event.target.closest('.asset-chip[data-board-item]');
+  if (assetChip) {
+    chooseBoardItem(assetChip.dataset.boardItem);
+    render();
+    return;
+  }
+
   const answer = event.target.closest('[data-answer]');
   if (answer && !state.loading) {
     state.loading = true;
@@ -282,22 +369,27 @@ app.addEventListener('click', async event => {
 
   const action = event.target.closest('[data-action]');
   if (!action || state.loading || imageState.busy) return;
+
   if (action.dataset.action === 'choose-mode') { state.step = 'mode'; render(); }
   if (action.dataset.action === 'edit-profile') { state.step = 2; render(); }
   if (action.dataset.action === 'personality-mode') { state.mode = 'personality'; state.step = state.result ? 4 : 3; render(); }
   if (action.dataset.action === 'image-mode') { state.mode = 'image'; state.step = 'image'; render(); }
+  if (action.dataset.action === 'select-image-flow') { selectImageFlow(action.dataset.flow); state.mode = 'image'; state.step = 'image'; render(); }
+  if (action.dataset.action === 'reset-image-flow') { resetImageFlow(); state.mode = 'image'; state.step = 'image'; render(); }
   if (action.dataset.action === 'clear-selection') { clearSelection(); render(); }
   if (action.dataset.action === 'convert-image') { await imageJob(() => convertImage()); }
-  if (action.dataset.action === 'image-badge' && imageState.artwork) { state.step = 5; await prepareBadge(); }
-  if (action.dataset.action === 'download-art' && imageState.url) { const a = document.createElement('a'); a.href = imageState.url; a.download = 'DCDC-透明字符画.png'; a.click(); }
+  if (action.dataset.action === 'remove-board-item') { removeBoardItem(imageState.activeItemId); render(); }
+  if (action.dataset.action === 'image-badge' && (imageState.artwork || getBoardItems().length)) { state.step = 5; await prepareBadge(); }
+  if (action.dataset.action === 'download-art' && imageState.url) {
+    const a = document.createElement('a');
+    a.href = imageState.url;
+    a.download = 'DCDC-ASCII-image.png';
+    a.click();
+  }
 
   if (action.dataset.action === 'start') { state.step = 2; render(); }
   if (action.dataset.action === 'back') { state.step = 1; render(); }
-  if (action.dataset.action === 'to-test' && validateProfile()) {
-    persist();
-    state.step = 'mode';
-    render();
-  }
+  if (action.dataset.action === 'to-test' && validateProfile()) { persist(); state.step = 'mode'; render(); }
   if (action.dataset.action === 'previous-question') {
     if (state.questionIndex > 0) state.questionIndex -= 1;
     else state.step = 'mode';
@@ -314,10 +406,7 @@ app.addEventListener('click', async event => {
     state.step = 3;
     render();
   }
-  if (action.dataset.action === 'show-badge') {
-    state.step = 5;
-    await prepareBadge();
-  }
+  if (action.dataset.action === 'show-badge') { state.step = 5; await prepareBadge(); }
   if (action.dataset.action === 'back-result') { state.step = state.mode === 'image' ? 'image' : 4; render(); }
   if (action.dataset.action === 'zoom') { state.lightbox = true; render(); }
   if (action.dataset.action === 'close-zoom') { state.lightbox = false; render(); }
@@ -335,4 +424,6 @@ window.__DCDC__ = { QUESTIONS, scorePersonality, ARCHETYPE_BY_ID, createPersonaS
 if (DEBUG_MODE) mountDebugPanel(app);
 else render();
 
-window.addEventListener('pagehide', () => { if (state.badgeBlobUrl) URL.revokeObjectURL(state.badgeBlobUrl); });
+window.addEventListener('pagehide', () => {
+  if (state.badgeBlobUrl) URL.revokeObjectURL(state.badgeBlobUrl);
+});
