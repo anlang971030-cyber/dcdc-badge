@@ -18,7 +18,8 @@ export const imageState = {
   selection: null,
   selecting: false,
   dragStart: null,
-  cvReady: false
+  cvReady: false,
+  subjectConfirmed: false
 };
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -53,7 +54,7 @@ export function editorMarkup() {
       </div>
     </div>` : '';
 
-  return `<section class="screen"><p class="eyebrow">IMAGE TO CHARACTERS</p><h2>${COPY.title}</h2><p class="lead">${COPY.hint}</p><div class="stack"><div class="field"><label for="image-file">上传图片</label><input id="image-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp"><small>不超过 20 MB / 4000 万像素；处理时最长边缩至 1600 px，GIF 使用静态帧。</small></div>${stage}${select('preset','字符预设',[['CUSTOM','自定义中文 / 英文 / 代码'],['CLASSIC','经典'],['DENSE','密集'],['BLOCK','方块']])}<div class="field"><label for="customText">自定义字符（空白会忽略）</label><textarea id="customText" data-config="customText" maxlength="4000" rows="3">${esc(c.customText)}</textarea></div>${select('colorMode','颜色',[['ORIGINAL','原图颜色'],['BLACK','黑色'],['BLUE','蓝色'],['CUSTOM','自定义颜色']])}<div class="field"><label for="customColor">自定义颜色值</label><input type="color" id="customColor" data-config="customColor" value="${c.customColor}"></div><details><summary>高级设置</summary><div class="advanced-grid">${[['columns','列数',40,260],['fontSize','字符大小（像素块）',6,32],['lineHeight','行高',6,40],['alphaThreshold','透明阈值',120,255]].map(([id,t,min,max])=>`<div class="field"><label for="${id}">${t}</label><input type="number" id="${id}" data-config="${id}" min="${min}" max="${max}" value="${c[id]}"></div>`).join('')}</div></details><label><input id="split-view" type="checkbox" ${s.split ? 'checked' : ''}> 原图 / 字符画并排对比</label></div><p class="error" role="status" id="image-status">${esc(s.error)}</p><div class="image-comparison ${s.split ? 'split' : ''}" id="image-comparison">${s.originalUrl && s.split ? `<figure><img src="${s.originalUrl}" alt="原图"><figcaption>原图</figcaption></figure>` : ''}${s.url ? `<figure class="checker"><img src="${s.url}" alt="字符画"><figcaption>透明字符画</figcaption></figure>` : ''}</div><div class="actions"><button class="btn btn-primary" data-action="convert-image" ${s.busy ? 'disabled' : ''}>${s.busy ? '正在处理…' : '应用效果 / 生成字符画'}</button><button class="btn btn-primary" data-action="image-badge" ${!s.artwork || s.busy ? 'disabled' : ''}>生成我的标识牌 →</button><button class="btn btn-ghost" data-action="download-art" ${!s.url || s.busy ? 'disabled' : ''}>下载透明字符画 PNG</button><button class="btn btn-ghost" data-action="choose-mode">返回制作方式</button></div></section>`;
+  return `<section class="screen"><p class="eyebrow">IMAGE TO CHARACTERS</p><h2>${COPY.title}</h2><p class="lead">${COPY.hint}</p><div class="stack"><div class="field"><label for="image-file">上传图片</label><input id="image-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp"><small>不超过 20 MB / 4000 万像素；处理时最长边缩至 1600 px，GIF 使用静态帧。</small></div>${stage}${select('preset','字符预设',[['CUSTOM','自定义中文 / 英文 / 代码'],['CLASSIC','经典'],['DENSE','密集'],['BLOCK','方块']])}<div class="field"><label for="customText">自定义字符（空白会忽略）</label><textarea id="customText" data-config="customText" maxlength="4000" rows="3">${esc(c.customText)}</textarea></div>${select('colorMode','颜色',[['ORIGINAL','原图颜色'],['BLACK','黑色'],['BLUE','蓝色'],['CUSTOM','自定义颜色']])}<div class="field"><label for="customColor">自定义颜色值</label><input type="color" id="customColor" data-config="customColor" value="${c.customColor}"></div><details><summary>高级设置</summary><div class="advanced-grid">${[['columns','列数',40,260],['fontSize','字符大小（像素块）',6,32],['lineHeight','行高',6,40],['alphaThreshold','透明阈值',120,255]].map(([id,t,min,max])=>`<div class="field"><label for="${id}">${t}</label><input type="number" id="${id}" data-config="${id}" min="${min}" max="${max}" value="${c[id]}"></div>`).join('')}</div></details><label><input id="split-view" type="checkbox" ${s.split ? 'checked' : ''}> 原图 / 字符画并排对比</label></div><p class="error" role="status" id="image-status">${esc(s.error)}</p><div class="image-comparison ${s.split ? 'split' : ''}" id="image-comparison">${s.originalUrl && s.split ? `<figure><img src="${s.originalUrl}" alt="原图"><figcaption>原图</figcaption></figure>` : ''}${s.url ? `<figure class="checker"><img src="${s.url}" alt="字符画"><figcaption>透明字符画</figcaption></figure>` : ''}</div><div class="actions"><button class="btn btn-primary" data-action="convert-image" ${s.busy ? 'disabled' : ''}>${s.busy ? '正在处理…' : (s.subject ? '第二步：生成 ASCII 字符画' : '第一步：确认主体 / 生成透明PNG')}</button><button class="btn btn-primary" data-action="image-badge" ${!s.artwork || s.busy ? 'disabled' : ''}>生成我的标识牌 →</button><button class="btn btn-ghost" data-action="download-art" ${!s.url || s.busy ? 'disabled' : ''}>下载透明字符画 PNG</button><button class="btn btn-ghost" data-action="choose-mode">返回制作方式</button></div></section>`;
 }
 
 export function releaseArtwork() {
@@ -143,16 +144,17 @@ export async function convertImage() {
   const s = imageState;
   if (!s.source) throw new Error('请先上传图片。');
 
-  let working = s.source;
-  if (s.useSelection) {
+  let working = s.subject || s.source;
+
+  // 两阶段流程：第一步只生成主体PNG，第二步再ASCII化，避免长链计算导致卡死。
+  if (s.useSelection && !s.subject) {
     if (!s.selection) throw new Error('请先在原图上拖拽框选主体区域。');
-    working = await extractSubjectByGrabCut(s.source, s.selection);
-    if (working) {
-      if (s.subjectUrl) URL.revokeObjectURL(s.subjectUrl);
-      const subjectBlob = await new Promise(resolve => working.toBlob(resolve, 'image/png'));
-      s.subjectUrl = subjectBlob ? URL.createObjectURL(subjectBlob) : '';
-      s.subject = working;
-    }
+    working = await extractSelectedSubject(s.source, s.selection);
+    s.subject = working;
+    const subjectBlob = await new Promise(resolve => working.toBlob(resolve, 'image/png'));
+    s.subjectUrl = subjectBlob ? URL.createObjectURL(subjectBlob) : '';
+    s.error = '主体PNG已生成，请再次点击按钮生成ASCII。';
+    return;
   }
 
   const artwork = renderAscii(working, s.config);
@@ -184,69 +186,16 @@ export async function handleImageFile(file) {
   if (!s.useSelection) await convertImage();
 }
 
-async function extractSubjectByGrabCut(source, selection) {
-  const cv = await ensureOpenCvReady();
-  const rect = {
-    x: Math.max(0, Math.floor(selection.x * source.width)),
-    y: Math.max(0, Math.floor(selection.y * source.height)),
-    width: Math.max(1, Math.floor(selection.w * source.width)),
-    height: Math.max(1, Math.floor(selection.h * source.height))
-  };
-
-  if (rect.width < 2 || rect.height < 2) throw new Error('框选区域过小，请重新框选主体。');
-
-  let srcMat, mask, bgdModel, fgdModel, binaryMask, kernel;
-  try {
-    srcMat = cv.imread(source);
-    mask = new cv.Mat(source.height, source.width, cv.CV_8UC1, new cv.Scalar(cv.GC_BGD));
-    bgdModel = new cv.Mat();
-    fgdModel = new cv.Mat();
-    cv.grabCut(srcMat, mask, new cv.Rect(rect.x, rect.y, rect.width, rect.height), bgdModel, fgdModel, 4, cv.GC_INIT_WITH_RECT);
-
-    binaryMask = new cv.Mat(source.height, source.width, cv.CV_8UC1);
-    for (let y = 0; y < source.height; y++) {
-      for (let x = 0; x < source.width; x++) {
-        const value = mask.ucharPtr(y, x)[0];
-        binaryMask.ucharPtr(y, x)[0] = (value === cv.GC_FGD || value === cv.GC_PR_FGD) ? 255 : 0;
-      }
-    }
-
-    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(3, 3));
-    cv.morphologyEx(binaryMask, binaryMask, cv.MORPH_OPEN, kernel);
-    cv.morphologyEx(binaryMask, binaryMask, cv.MORPH_CLOSE, kernel);
-
-    const out = document.createElement('canvas');
-    out.width = source.width;
-    out.height = source.height;
-    const outCtx = out.getContext('2d', { willReadFrequently: true });
-    outCtx.drawImage(source, 0, 0);
-    const imageData = outCtx.getImageData(0, 0, out.width, out.height);
-    const pixels = imageData.data;
-
-    let hasForeground = false;
-    for (let y = 0; y < out.height; y++) {
-      for (let x = 0; x < out.width; x++) {
-        const keep = binaryMask.ucharPtr(y, x)[0] > 0;
-        const i = (y * out.width + x) * 4;
-        if (!keep) {
-          pixels[i + 3] = 0;
-        } else {
-          hasForeground = true;
-        }
-      }
-    }
-
-    if (!hasForeground) throw new Error('主体提取失败，请重新框选更明确的主体区域。');
-
-    outCtx.putImageData(imageData, 0, 0);
-    return cropTransparent(out, 4);
-  } catch (error) {
-    throw new Error(`主体提取失败：${error.message || '请重试'}`);
-  } finally {
-    [srcMat, mask, bgdModel, fgdModel, binaryMask, kernel].forEach(item => {
-      try { item?.delete?.(); } catch {}
-    });
-  }
+async function extractSelectedSubject(source, selection) {
+  const x = Math.floor(selection.x * source.width);
+  const y = Math.floor(selection.y * source.height);
+  const w = Math.max(1, Math.floor(selection.w * source.width));
+  const h = Math.max(1, Math.floor(selection.h * source.height));
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  const ctx = out.getContext('2d', {willReadFrequently:true});
+  ctx.drawImage(source, x, y, w, h, 0, 0, w, h);
+  return cropTransparent(out, 8);
 }
 
 async function ensureOpenCvReady() {

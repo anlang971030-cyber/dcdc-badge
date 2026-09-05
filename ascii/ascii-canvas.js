@@ -91,7 +91,7 @@ export function cropTransparent(img, padding = 8) {
 }
 
 function parseColor(mode, rgb, customColor) {
-  if (mode === 'INVERT') return [255 - rgb[0], 255 - rgb[1], 255 - rgb[2]];
+  if (mode === 'INVERT') return [255-rgb[0], 255-rgb[1], 255-rgb[2]];
   if (mode === 'BLACK') return [30, 30, 30];
   if (mode === 'BLUE') return [46, 108, 246];
   if (mode === 'CUSTOM') {
