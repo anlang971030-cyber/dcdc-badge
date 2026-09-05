@@ -1,6 +1,6 @@
 import { COPY } from './ascii/ascii-canvas.js';
 import { imageState, editorMarkup, handleImageFile, convertImage, releaseArtwork } from './ascii/image-editor.js';
-import { directEditorMarkup, handleDirectFiles, directItems, updateDirectItem, removeDirectItem, moveDirectItem, selectDirectItem, getActiveDirectItem, setDirectPosition } from './ascii/direct-image-editor.js';
+import { directEditorMarkup, handleDirectFiles, directItems, updateDirectItem, removeDirectItem, moveDirectItem, selectDirectItem, getActiveDirectItem, setDirectPosition, refreshDirectEditorDom, syncDirectEditorDom } from './ascii/direct-image-editor.js';
 import { renderImageBadge } from './badge/badge-renderer.js?v=20260905-4';
 import { QUESTIONS } from './personality/questions.js';
 import { scorePersonality } from './personality/scoring.js';
@@ -183,7 +183,7 @@ app.addEventListener('input', event => {
   const directId = event.target.dataset.directId;
   if (directField && directId) {
     updateDirectItem(directId, directField, event.target.value);
-    render();
+    syncDirectEditorDom();
     return;
   }
 
@@ -203,7 +203,7 @@ async function imageJob(job) {
 }
 
 app.addEventListener('change', async event => {
-  if (event.target.id === 'direct-files' && event.target.files.length) { await handleDirectFiles([...event.target.files]); event.target.value=''; render(); return; }
+  if (event.target.id === 'direct-files' && event.target.files.length) { await handleDirectFiles([...event.target.files]); event.target.value=''; refreshDirectEditorDom(); return; }
   if (event.target.id === 'image-file' && event.target.files[0]) { const file = event.target.files[0]; await imageJob(() => handleImageFile(file)); }
   if (event.target.id === 'split-view') { imageState.split = event.target.checked; render(); }
 
@@ -229,6 +229,7 @@ app.addEventListener('pointerdown', event => {
   directDrag.originX = active.x;
   directDrag.originY = active.y;
   event.preventDefault();
+  syncDirectEditorDom();
 });
 
 app.addEventListener('pointermove', event => {
@@ -238,7 +239,7 @@ app.addEventListener('pointermove', event => {
   const x = directDrag.originX + dx * (2000 / 960);
   const y = directDrag.originY + dy * (900 / 770);
   setDirectPosition(directDrag.id, x, y);
-  render();
+  syncDirectEditorDom();
 });
 
 function stopDirectDrag() {
@@ -259,7 +260,7 @@ app.addEventListener('click', async event => {
   const directSelect = event.target.closest('[data-direct-select]');
   if (directSelect) {
     selectDirectItem(directSelect.dataset.directSelect);
-    render();
+    syncDirectEditorDom();
     return;
   }
   const interest = event.target.closest('[data-interest]');
@@ -298,9 +299,9 @@ app.addEventListener('click', async event => {
   if (action.dataset.action === 'direct-image-mode') { state.mode = 'image'; state.imageFlow='direct'; state.step='direct-image'; render(); }
   if (action.dataset.action === 'ascii-image-mode') { state.mode = 'image'; state.imageFlow='ascii'; state.step='image'; render(); }
   if (action.dataset.action === 'back-image-choice') { state.step = 'image-choice'; render(); }
-  if (action.dataset.action === 'direct-remove') { const active = getActiveDirectItem(); if (active) removeDirectItem(active.id); render(); }
-  if (action.dataset.action === 'direct-layer-up') { const active = getActiveDirectItem(); if (active) moveDirectItem(active.id, 'up'); render(); }
-  if (action.dataset.action === 'direct-layer-down') { const active = getActiveDirectItem(); if (active) moveDirectItem(active.id, 'down'); render(); }
+  if (action.dataset.action === 'direct-remove') { const active = getActiveDirectItem(); if (active) removeDirectItem(active.id); refreshDirectEditorDom(); }
+  if (action.dataset.action === 'direct-layer-up') { const active = getActiveDirectItem(); if (active) moveDirectItem(active.id, 'up'); refreshDirectEditorDom(); }
+  if (action.dataset.action === 'direct-layer-down') { const active = getActiveDirectItem(); if (active) moveDirectItem(active.id, 'down'); refreshDirectEditorDom(); }
   if (action.dataset.action === 'convert-image') { await imageJob(() => convertImage()); }
   if (action.dataset.action === 'image-badge') {
     if ((state.imageFlow === 'direct' && directItems.length) || (state.imageFlow !== 'direct' && imageState.artwork)) {
