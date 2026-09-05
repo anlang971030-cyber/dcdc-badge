@@ -40,6 +40,10 @@ function generatedItems() {
   return imageState.sourceItems.filter(item => item.artworkCanvas);
 }
 
+function indexForPosition(index) {
+  return index % DEFAULT_POSITIONS.length;
+}
+
 function listSourcesMarkup() {
   if (!imageState.sourceItems.length) return '<p class="board-empty">尚未上传图片。</p>';
   return `<div class="ascii-source-list">${imageState.sourceItems.map((item, index) => `
@@ -62,8 +66,8 @@ function configMarkup() {
     <div class="ascii-config-grid">
       ${selectField('preset', '字符预设', c.preset, [[ 'CUSTOM','自定义中文 / 英文 / 代码' ],[ 'CLASSIC','经典' ],[ 'DENSE','密集' ],[ 'BLOCK','方块' ]])}
       ${selectField('colorMode', '颜色', c.colorMode, [[ 'ORIGINAL','原图颜色' ],[ 'BLACK','黑色' ],[ 'BLUE','蓝色' ],[ 'CUSTOM','自定义颜色' ]])}
+      <div class="field ascii-custom-color"><label for="customColor">自定义颜色值</label><input type="color" id="customColor" data-config="customColor" value="${c.customColor}"></div>
       <div class="field ascii-custom-text"><label for="customText">自定义字符（空白会忽略）</label><textarea id="customText" data-config="customText" maxlength="4000" rows="4">${esc(c.customText)}</textarea></div>
-      <div class="field"><label for="customColor">自定义颜色值</label><input type="color" id="customColor" data-config="customColor" value="${c.customColor}"></div>
     </div>
     <details class="ascii-settings-box" open>
       <summary>当前图片生成设置</summary>
@@ -138,9 +142,9 @@ export function editorMarkup() {
   <section class="ascii-layout-section">
     <p class="eyebrow">ASCII LAYOUT EDITOR</p>
     <h3>字符画自定义编辑区</h3>
-    <div class="direct-layout-grid ascii-layout-grid">
+    <div class="ascii-layout-stack">
       <div class="direct-stage-panel"><div class="ascii-board" id="ascii-board">${stageMarkup()}</div><p class="preview-note">提示：可直接拖动字符画调整位置，也可使用下方滑块微调。</p></div>
-      <div class="personalize-panel direct-side-panel ascii-side-panel"><div class="personalize-group"><p>已生成字符画</p><div id="ascii-generated-list-wrap">${generatedListMarkup()}</div></div><div class="personalize-group"><p>当前字符画调整</p><div id="ascii-layout-controls-wrap">${layoutControlsMarkup()}</div></div></div>
+      <div class="personalize-panel ascii-bottom-panel"><div class="personalize-group"><p>已生成字符画</p><div id="ascii-generated-list-wrap">${generatedListMarkup()}</div></div><div class="personalize-group"><p>当前字符画调整</p><div id="ascii-layout-controls-wrap">${layoutControlsMarkup()}</div></div></div>
     </div>
   </section>
   <div class="actions"><button class="btn btn-primary" data-action="image-badge" ${generatedItems().length ? '' : 'disabled'}>生成我的标识牌 →</button></div></section>`;
@@ -180,6 +184,7 @@ export async function handleImageFiles(files) {
     const blob = await new Promise(resolve => sourceCanvas.toBlob(resolve, 'image/png'));
     const originalUrl = blob ? URL.createObjectURL(blob) : sourceCanvas.toDataURL('image/png');
     const config = { ...DEFAULTS };
+    const positionIndex = indexForPosition(imageState.sourceItems.length);
     const item = {
       id: nextId++,
       name: file.name,
@@ -188,11 +193,11 @@ export async function handleImageFiles(files) {
       config,
       artworkCanvas: null,
       artworkUrl: '',
-      x: 0.5,
-      y: 0.5,
+      x: DEFAULT_POSITIONS[positionIndex][0],
+      y: DEFAULT_POSITIONS[positionIndex][1],
       scale: 1,
       rotation: 0,
-      baseScale: 1
+      baseScale: 0
     };
     imageState.sourceItems.push(item);
     imageState.activeSourceId = item.id;
@@ -238,10 +243,7 @@ export async function convertImage() {
   item.artworkCanvas = artwork;
   item.artworkUrl = URL.createObjectURL(blob);
   const ratio = Math.min((BOARD_AREA.width * 0.34) / artwork.width, (BOARD_AREA.height * 0.44) / artwork.height, 1);
-  const [x, y] = DEFAULT_POSITIONS[(generatedItems().length - 1) % DEFAULT_POSITIONS.length];
-  if (!item.baseScale || !item.scale) {
-    item.x = x;
-    item.y = y;
+  if (!item.baseScale) {
     item.scale = 1;
     item.rotation = 0;
   }
@@ -291,7 +293,7 @@ export function setArtworkPosition(id, x, y) {
 }
 
 export function getGeneratedBoardItems() {
-  return generatedItems();
+  return generatedItems().map(item => ({ ...item, canvas: item.artworkCanvas }));
 }
 
 export function downloadActiveArtwork() {
