@@ -32,6 +32,10 @@ function activeItem() {
   return directItems.find(item => item.id === activeId) || null;
 }
 
+function stageMarkup() {
+  return directItems.map((item, index) => `<button type="button" class="direct-item ${item.id === activeId ? 'active' : ''}" data-direct-select="${item.id}" data-direct-draggable="${item.id}" data-direct-order="${index}" style="${stageStyle(item)}"><img src="${item.url}" alt="${escapeHtml(item.name)}"></button>`).join('');
+}
+
 function controlsMarkup() {
   const item = activeItem();
   if (!item) {
@@ -39,10 +43,10 @@ function controlsMarkup() {
   }
   return `
     <div class="direct-controls-grid">
-      <div class="field"><label for="direct-x">横向位置</label><input id="direct-x" type="range" min="0" max="100" value="${Math.round(item.x * 100)}" data-direct-field="x" data-direct-id="${item.id}"><small>${Math.round(item.x * 100)}%</small></div>
-      <div class="field"><label for="direct-y">纵向位置</label><input id="direct-y" type="range" min="0" max="100" value="${Math.round(item.y * 100)}" data-direct-field="y" data-direct-id="${item.id}"><small>${Math.round(item.y * 100)}%</small></div>
-      <div class="field"><label for="direct-scale">缩放大小</label><input id="direct-scale" type="range" min="20" max="220" value="${Math.round(item.scale * 100)}" data-direct-field="scale" data-direct-id="${item.id}"><small>${Math.round(item.scale * 100)}%</small></div>
-      <div class="field"><label for="direct-rotation">旋转方向</label><input id="direct-rotation" type="range" min="-180" max="180" value="${Math.round(item.rotation)}" data-direct-field="rotation" data-direct-id="${item.id}"><small>${Math.round(item.rotation)}°</small></div>
+      <div class="field"><label for="direct-x">横向位置</label><input id="direct-x" type="range" min="0" max="100" value="${Math.round(item.x * 100)}" data-direct-field="x" data-direct-id="${item.id}"><small data-direct-value="x">${Math.round(item.x * 100)}%</small></div>
+      <div class="field"><label for="direct-y">纵向位置</label><input id="direct-y" type="range" min="0" max="100" value="${Math.round(item.y * 100)}" data-direct-field="y" data-direct-id="${item.id}"><small data-direct-value="y">${Math.round(item.y * 100)}%</small></div>
+      <div class="field"><label for="direct-scale">缩放大小</label><input id="direct-scale" type="range" min="20" max="220" value="${Math.round(item.scale * 100)}" data-direct-field="scale" data-direct-id="${item.id}"><small data-direct-value="scale">${Math.round(item.scale * 100)}%</small></div>
+      <div class="field"><label for="direct-rotation">旋转方向</label><input id="direct-rotation" type="range" min="-180" max="180" value="${Math.round(item.rotation)}" data-direct-field="rotation" data-direct-id="${item.id}"><small data-direct-value="rotation">${Math.round(item.rotation)}°</small></div>
     </div>
     <div class="direct-toolbar">
       <button class="btn btn-ghost" data-action="direct-layer-down">下移一层</button>
@@ -54,14 +58,14 @@ function controlsMarkup() {
 function listMarkup() {
   if (!directItems.length) return '<p class="board-empty">当前还没有上传图片。</p>';
   return `<div class="direct-list">${directItems.map((item, index) => `
-    <button class="direct-list-item ${item.id === activeId ? 'active' : ''}" data-direct-select="${item.id}">
+    <button class="direct-list-item ${item.id === activeId ? 'active' : ''}" data-direct-select="${item.id}" data-direct-order="${index}">
       <span class="direct-list-index">${index + 1}</span>
       <img src="${item.url}" alt="图片${index + 1}">
     </button>`).join('')}</div>`;
 }
 
 export function directEditorMarkup() {
-  return `<section class="screen"><p class="eyebrow">DIRECT IMAGE</p><h2>上传心仪图片制作</h2><p class="lead">支持多张图片上传。下方会显示铭牌底图，上传的图片可在底图上调整大小、位置和方向；点击预览区中的图片或右侧列表即可切换当前编辑对象。</p><div class="stack"><div class="field"><label for="direct-files">上传图片</label><input id="direct-files" class="direct-file-input" type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,image/bmp"><label class="direct-file-button" for="direct-files">选择图片</label><small>支持多选；建议优先上传透明 PNG，也支持 JPG / WEBP。可以继续追加上传。</small></div><div class="direct-layout-grid"><div class="direct-stage-panel"><div class="direct-board" id="direct-board">${directItems.map(item => `<button type="button" class="direct-item ${item.id === activeId ? 'active' : ''}" data-direct-select="${item.id}" data-direct-draggable="${item.id}" style="${stageStyle(item)}"><img src="${item.url}" alt="${escapeHtml(item.name)}"></button>`).join('')}</div><p class="preview-note">提示：可直接拖动图片调整位置，也可使用下方滑块精细调整。</p></div><div class="personalize-panel direct-side-panel"><div class="personalize-group"><p>已上传图片</p>${listMarkup()}</div><div class="personalize-group"><p>当前图片调整</p>${controlsMarkup()}</div></div></div></div><div class="actions"><button class="btn btn-primary" data-action="image-badge" ${directItems.length ? '' : 'disabled'}>生成我的标识牌</button><button class="btn btn-ghost" data-action="back-image-choice">返回图片制作方式</button></div></section>`;
+  return `<section class="screen"><p class="eyebrow">DIRECT IMAGE</p><h2>上传心仪图片制作</h2><p class="lead">支持多张图片上传。下方会显示铭牌底图，上传的图片可在底图上调整大小、位置和方向；点击预览区中的图片或下方素材卡片即可切换当前编辑对象。</p><div class="stack"><div class="field"><label for="direct-files">上传图片</label><input id="direct-files" class="direct-file-input" type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,image/bmp"><label class="direct-file-button" for="direct-files">选择图片</label><small>支持多选；建议优先上传透明 PNG，也支持 JPG / WEBP。可以继续追加上传。</small></div><div class="direct-layout-grid"><div class="direct-stage-panel"><div class="direct-board" id="direct-board">${stageMarkup()}</div><p class="preview-note">提示：可直接拖动图片调整位置，也可使用下方滑块精细调整。</p></div><div class="personalize-panel direct-side-panel"><div class="personalize-group"><p>已上传图片</p><div id="direct-list-wrap">${listMarkup()}</div></div><div class="personalize-group"><p>当前图片调整</p><div id="direct-controls-wrap">${controlsMarkup()}</div></div></div></div></div><div class="actions direct-actions-stack"><button class="btn btn-primary" data-action="image-badge" ${directItems.length ? '' : 'disabled'}>生成我的标识牌</button><button class="btn btn-ghost" data-action="back-image-choice">返回图片制作方式</button></div></section>`;
 }
 
 export async function handleDirectFiles(files) {
@@ -127,4 +131,72 @@ export function clearDirectItems() {
     if (item?.url) URL.revokeObjectURL(item.url);
   });
   activeId = null;
+}
+
+export function refreshDirectEditorDom() {
+  const board = document.querySelector('#direct-board');
+  const listWrap = document.querySelector('#direct-list-wrap');
+  const controlsWrap = document.querySelector('#direct-controls-wrap');
+  if (board) board.innerHTML = stageMarkup();
+  if (listWrap) listWrap.innerHTML = listMarkup();
+  if (controlsWrap) controlsWrap.innerHTML = controlsMarkup();
+  const generateBtn = document.querySelector('[data-action="image-badge"]');
+  if (generateBtn) generateBtn.disabled = !directItems.length;
+}
+
+export function syncDirectEditorDom() {
+  const board = document.querySelector('#direct-board');
+  const listWrap = document.querySelector('#direct-list-wrap');
+  const controlsWrap = document.querySelector('#direct-controls-wrap');
+  if (!board || !listWrap || !controlsWrap) return;
+
+  const stageEls = [...board.querySelectorAll('.direct-item')];
+  const listEls = [...listWrap.querySelectorAll('.direct-list-item')];
+  if (stageEls.length !== directItems.length || listEls.length !== directItems.length) {
+    refreshDirectEditorDom();
+    return;
+  }
+
+  directItems.forEach((item, index) => {
+    const stageEl = board.querySelector(`[data-direct-draggable="${item.id}"]`);
+    const listEl = listWrap.querySelector(`[data-direct-select="${item.id}"]`);
+    if (!stageEl || !listEl) {
+      refreshDirectEditorDom();
+      return;
+    }
+    stageEl.style.cssText = stageStyle(item);
+    stageEl.classList.toggle('active', item.id === activeId);
+    stageEl.dataset.directOrder = index;
+    listEl.classList.toggle('active', item.id === activeId);
+    listEl.dataset.directOrder = index;
+    const badge = listEl.querySelector('.direct-list-index');
+    if (badge) badge.textContent = String(index + 1);
+  });
+
+  const currentId = controlsWrap.querySelector('[data-direct-id]')?.dataset.directId;
+  const active = activeItem();
+  if (!active) {
+    controlsWrap.innerHTML = controlsMarkup();
+    return;
+  }
+  if (currentId !== String(active.id)) {
+    controlsWrap.innerHTML = controlsMarkup();
+    return;
+  }
+
+  const valueMap = {
+    x: `${Math.round(active.x * 100)}%`,
+    y: `${Math.round(active.y * 100)}%`,
+    scale: `${Math.round(active.scale * 100)}%`,
+    rotation: `${Math.round(active.rotation)}°`
+  };
+  ['x', 'y', 'scale', 'rotation'].forEach(key => {
+    const input = controlsWrap.querySelector(`[data-direct-field="${key}"]`);
+    const value = controlsWrap.querySelector(`[data-direct-value="${key}"]`);
+    if (input) input.value = key === 'rotation' ? String(Math.round(active.rotation)) : String(Math.round(active[key] * 100));
+    if (value) value.textContent = valueMap[key];
+  });
+
+  const generateBtn = document.querySelector('[data-action="image-badge"]');
+  if (generateBtn) generateBtn.disabled = !directItems.length;
 }
