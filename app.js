@@ -1,11 +1,22 @@
 import { COPY } from './ascii/ascii-canvas.js';
-import { imageState, editorMarkup, handleImageFile, convertImage, releaseArtwork } from './ascii/image-editor.js';
+import {
+  imageState,
+  editorMarkup,
+  handleImageFile,
+  convertImage,
+  releaseArtwork,
+  clearSelection,
+  setUseSelection,
+  beginSelection,
+  updateSelection,
+  endSelection
+} from './ascii/image-editor.js';
 import { renderImageBadge } from './badge/badge-renderer.js?v=20260905-4';
 import { QUESTIONS } from './personality/questions.js';
 import { scorePersonality } from './personality/scoring.js';
 import { ARCHETYPE_BY_ID } from './personality/archetypes.js';
 import { createPersonaSelection } from './personality/persona-variants.js';
-import { INTEREST_ASSETS, MAX_INTERESTS, RECOMMENDED_INTERESTS, sanitizeInterests, toggleInterestSelection } from './interests/interest-assets.js?v=20260905-4';
+import { INTEREST_ASSETS, MAX_INTERESTS, RECOMMENDED_INTERESTS, toggleInterestSelection } from './interests/interest-assets.js?v=20260905-4';
 import { renderPersonaComposer } from './components/persona-composer.js?v=20260905-4';
 import { mountDebugPanel } from './debug-panel.js?v=20260905-4';
 import { renderBadge } from './badge/badge-renderer.js?v=20260905-4';
@@ -30,6 +41,8 @@ const state = {
   lightbox: false,
   loading: false
 };
+
+let selectionSession = null;
 
 function safeParse(value) {
   try { return JSON.parse(value); } catch { return null; }
@@ -89,8 +102,7 @@ function renderTest() {
 function renderResult() {
   const { primary, secondary } = state.result;
   const composer = renderPersonaComposer({ profile: { ...state.profile, group: effectiveGroup() }, persona: primary, interests: [] });
-  const glassesOptions = [['none', '无'], ['square', '方框'], ['round', '圆框']]
-    .map(([id, label]) => `<button class="personalize-chip" data-glasses="${id}" aria-pressed="${state.preferences.glasses === id}">${label}</button>`).join('');
+  const glassesOptions = [['none', '无'], ['square', '方框'], ['round', '圆框']].map(([id, label]) => `<button class="personalize-chip" data-glasses="${id}" aria-pressed="${state.preferences.glasses === id}">${label}</button>`).join('');
   const interestOptions = INTEREST_ASSETS.map(item => {
     const selectedIndex = state.preferences.interests.indexOf(item.id);
     const selected = selectedIndex >= 0;
@@ -103,12 +115,13 @@ function renderResult() {
 
 function renderBadgeScreen() {
   const persona = state.mode === 'image' ? null : state.result.primary;
-  return shell(`<section class="screen badge-screen"><p class="eyebrow">YOUR DCDC BADGE</p><h2>专属标识牌已生成</h2><p class="lead">${escapeHtml(state.profile.name)} · ${persona ? persona.nameZh + ' / ' + persona.nameEn : COPY.badgeLabel}</p><div class="preview-wrap"><figure class="preview-card">${state.loading ? '<div class="loading-card">正在合成标识牌…</div>' : `<img src="${state.badgeUrl}" alt="${escapeHtml(state.profile.name)}的专属数创标识牌" data-action="zoom">`}</figure><p class="preview-note">点击标识牌查看大图 · 高清文件 2000 × 900 px</p></div><div class="actions"><button class="btn btn-primary" data-action="download" ${state.loading ? 'disabled' : ''}>下载 PNG<span>↓</span></button><button class="btn btn-ghost" data-action="back-result">${state.mode === 'image' ? '返回图片定制' : '返回人格结果'}</button></div></section>`);
+  return shell(`<section class="screen badge-screen"><p class="eyebrow">YOUR DCDC BADGE</p><h2>专属标识牌已生成</h2><p class="lead">${escapeHtml(state.profile.name)} · ${persona ? `${persona.nameZh} / ${persona.nameEn}` : COPY.badgeLabel}</p><div class="preview-wrap"><figure class="preview-card">${state.loading ? '<div class="loading-card">正在合成标识牌…</div>' : `<img src="${state.badgeUrl}" alt="${escapeHtml(state.profile.name)}的专属数创标识牌" data-action="zoom">`}</figure><p class="preview-note">点击标识牌查看大图 · 高清文件 2000 × 900 px</p></div><div class="actions"><button class="btn btn-primary" data-action="download" ${state.loading ? 'disabled' : ''}>下载 PNG<span>↓</span></button><button class="btn btn-ghost" data-action="back-result">${state.mode === 'image' ? '返回图片定制' : '返回人格结果'}</button></div></section>`);
 }
 
 function renderMode() {
   return shell(`<section class="screen"><p class="eyebrow">MAKE IT YOURS</p><h2>选择制作方式</h2><p class="lead">${escapeHtml(state.profile.name)}，用你喜欢的方式制作标识牌。</p><div class="stack"><button class="answer-card" data-action="personality-mode">我要做人格测试 →</button><button class="answer-card" data-action="image-mode">我要上传图片定制我的标识卡 →</button></div><div class="actions"><button class="btn btn-ghost" data-action="edit-profile">返回基础信息</button></div></section>`);
 }
+
 function render() {
   if (state.step === 'mode') app.innerHTML = renderMode();
   if (state.step === 'image') app.innerHTML = shell(editorMarkup());
@@ -120,6 +133,7 @@ function render() {
   if (state.lightbox && state.badgeUrl) {
     app.insertAdjacentHTML('beforeend', `<div class="lightbox" role="dialog" aria-modal="true" aria-label="标识牌大图"><button class="lightbox-close" aria-label="关闭" data-action="close-zoom">×</button><img src="${state.badgeUrl}" alt="高清标识牌"></div>`);
   }
+  syncSelectionOverlay();
 }
 
 function validateProfile() {
@@ -140,12 +154,14 @@ async function prepareBadge() {
   state.badgeBlobUrl = '';
   render();
   try {
-    const canvas = state.mode === 'image' ? await renderImageBadge({ profile: { ...state.profile, group: effectiveGroup() }, artwork: imageState.artwork }) : await renderBadge({
-      profile: { ...state.profile, group: effectiveGroup() },
-      persona: state.result.primary,
-      preferences: state.preferences,
-      scale: 1
-    });
+    const canvas = state.mode === 'image'
+      ? await renderImageBadge({ profile: { ...state.profile, group: effectiveGroup() }, artwork: imageState.artwork })
+      : await renderBadge({
+          profile: { ...state.profile, group: effectiveGroup() },
+          persona: state.result.primary,
+          preferences: state.preferences,
+          scale: 1
+        });
     state.badgeUrl = canvas.toDataURL('image/png');
     const badgeBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
     state.badgeBlobUrl = URL.createObjectURL(badgeBlob);
@@ -158,15 +174,66 @@ async function prepareBadge() {
   }
 }
 
+function resetImagePreview(message = '参数已修改，请点击“应用效果”。') {
+  imageState.error = message;
+  releaseArtwork();
+  const badgeButton = document.querySelector('[data-action="image-badge"]');
+  const downloadButton = document.querySelector('[data-action="download-art"]');
+  const comparison = document.querySelector('#image-comparison');
+  const status = document.querySelector('#image-status');
+  if (badgeButton) badgeButton.disabled = true;
+  if (downloadButton) downloadButton.disabled = true;
+  if (comparison) comparison.innerHTML = imageState.originalUrl && imageState.split
+    ? `<figure><img src="${imageState.originalUrl}" alt="原图"><figcaption>原图</figcaption></figure>`
+    : '';
+  if (status) status.textContent = message;
+}
+
+function pointerPositionWithinStage(event, stage) {
+  const rect = stage.getBoundingClientRect();
+  return {
+    x: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
+    y: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height))
+  };
+}
+
+function syncSelectionOverlay() {
+  const box = document.querySelector('#selection-box');
+  if (!box) return;
+  const selection = imageState.selection;
+  if (!imageState.useSelection || !selection) {
+    box.style.display = 'none';
+    return;
+  }
+  box.style.display = 'block';
+  box.style.left = `${selection.x * 100}%`;
+  box.style.top = `${selection.y * 100}%`;
+  box.style.width = `${selection.w * 100}%`;
+  box.style.height = `${selection.h * 100}%`;
+}
+
+async function imageJob(job) {
+  if (imageState.busy) return;
+  imageState.busy = true;
+  imageState.error = '';
+  render();
+  app.querySelectorAll('input, select, textarea, button').forEach(element => { element.disabled = true; });
+  try {
+    await new Promise(resolve => setTimeout(resolve, 30));
+    await job();
+  } catch (error) {
+    imageState.error = error.message;
+  } finally {
+    imageState.busy = false;
+    render();
+  }
+}
+
 app.addEventListener('input', event => {
   const key = event.target.dataset.config;
   if (key && !imageState.busy) {
-    imageState.config[key] = event.target.type === 'checkbox' ? event.target.checked : event.target.type === 'number' ? Number(event.target.value) : event.target.value;
-    releaseArtwork();
-    document.querySelector('[data-action="image-badge"]').disabled = true;
-    document.querySelector('[data-action="download-art"]').disabled = true;
-    document.querySelector('#image-comparison').innerHTML = '';
-    document.querySelector('#image-status').textContent = '参数已修改，请点击“应用效果”。';
+    imageState.config[key] = event.target.type === 'number' ? Number(event.target.value) : event.target.value;
+    resetImagePreview('参数已修改，请点击“应用效果”。');
   }
 
   if (event.target.id in state.profile) {
@@ -175,23 +242,58 @@ app.addEventListener('input', event => {
   }
 });
 
-async function imageJob(job) {
-  if (imageState.busy) return;
-  imageState.busy = true; imageState.error = ''; render();
-  app.querySelectorAll('input, select, textarea').forEach(element => { element.disabled = true; });
-  try { await new Promise(resolve => setTimeout(resolve, 30)); await job(); }
-  catch(error) { imageState.error = error.message; }
-  finally { imageState.busy = false; render(); }
-}
 app.addEventListener('change', async event => {
-  if (event.target.id === 'image-file' && event.target.files[0]) { const file = event.target.files[0]; await imageJob(() => handleImageFile(file)); }
-  if (event.target.id === 'split-view') { imageState.split = event.target.checked; render(); }
+  if (event.target.id === 'image-file' && event.target.files[0]) {
+    const file = event.target.files[0];
+    await imageJob(() => handleImageFile(file));
+  }
+
+  if (event.target.id === 'split-view') {
+    imageState.split = event.target.checked;
+    render();
+  }
+
+  if (event.target.id === 'use-selection') {
+    setUseSelection(event.target.checked);
+    resetImagePreview(event.target.checked
+      ? '已启用主体框选，请拖拽框选主体后点击“应用效果”。'
+      : '已切换为整张图片处理，请点击“应用效果”。');
+    render();
+  }
 
   if (event.target.id === 'group') {
     state.profile.group = event.target.value;
     persist();
     render();
   }
+});
+
+app.addEventListener('pointerdown', event => {
+  const stage = event.target.closest('#selection-stage');
+  if (!stage || imageState.busy || !imageState.useSelection) return;
+  event.preventDefault();
+  const point = pointerPositionWithinStage(event, stage);
+  selectionSession = { stage, pointerId: event.pointerId };
+  beginSelection(point.x, point.y);
+  syncSelectionOverlay();
+});
+
+window.addEventListener('pointermove', event => {
+  if (!selectionSession) return;
+  const point = pointerPositionWithinStage(event, selectionSession.stage);
+  updateSelection(point.x, point.y);
+  syncSelectionOverlay();
+});
+
+window.addEventListener('pointerup', event => {
+  if (!selectionSession) return;
+  const point = pointerPositionWithinStage(event, selectionSession.stage);
+  endSelection(point.x, point.y);
+  selectionSession = null;
+  syncSelectionOverlay();
+  resetImagePreview(imageState.selection
+    ? '主体范围已更新，请点击“应用效果”。'
+    : '框选区域过小，请重新框选主体。');
 });
 
 app.addEventListener('click', async event => {
@@ -202,6 +304,7 @@ app.addEventListener('click', async event => {
     render();
     return;
   }
+
   const interest = event.target.closest('[data-interest]');
   if (interest) {
     state.preferences.interests = toggleInterestSelection(state.preferences.interests, interest.dataset.interest);
@@ -209,6 +312,7 @@ app.addEventListener('click', async event => {
     render();
     return;
   }
+
   const answer = event.target.closest('[data-answer]');
   if (answer && !state.loading) {
     state.loading = true;
@@ -231,13 +335,24 @@ app.addEventListener('click', async event => {
 
   const action = event.target.closest('[data-action]');
   if (!action || state.loading || imageState.busy) return;
+
   if (action.dataset.action === 'choose-mode') { state.step = 'mode'; render(); }
   if (action.dataset.action === 'edit-profile') { state.step = 2; render(); }
   if (action.dataset.action === 'personality-mode') { state.mode = 'personality'; state.step = state.result ? 4 : 3; render(); }
   if (action.dataset.action === 'image-mode') { state.mode = 'image'; state.step = 'image'; render(); }
+  if (action.dataset.action === 'clear-selection') {
+    clearSelection();
+    resetImagePreview('框选已清除，请重新拖拽主体范围。');
+    render();
+  }
   if (action.dataset.action === 'convert-image') { await imageJob(() => convertImage()); }
   if (action.dataset.action === 'image-badge' && imageState.artwork) { state.step = 5; await prepareBadge(); }
-  if (action.dataset.action === 'download-art' && imageState.url) { const a = document.createElement('a'); a.href = imageState.url; a.download = 'DCDC-透明字符画.png'; a.click(); }
+  if (action.dataset.action === 'download-art' && imageState.url) {
+    const a = document.createElement('a');
+    a.href = imageState.url;
+    a.download = 'DCDC-透明字符画.png';
+    a.click();
+  }
 
   if (action.dataset.action === 'start') { state.step = 2; render(); }
   if (action.dataset.action === 'back') { state.step = 1; render(); }
@@ -283,4 +398,6 @@ window.__DCDC__ = { QUESTIONS, scorePersonality, ARCHETYPE_BY_ID, createPersonaS
 if (DEBUG_MODE) mountDebugPanel(app);
 else render();
 
-window.addEventListener('pagehide', () => { if (state.badgeBlobUrl) URL.revokeObjectURL(state.badgeBlobUrl); });
+window.addEventListener('pagehide', () => {
+  if (state.badgeBlobUrl) URL.revokeObjectURL(state.badgeBlobUrl);
+});
