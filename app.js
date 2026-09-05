@@ -1,7 +1,6 @@
 import { COPY } from './ascii/ascii-canvas.js';
 import { imageState, editorMarkup, handleImageFile, convertImage, releaseArtwork, beginSelection, updateSelection, endSelection, clearSelection, setUseSelection } from './ascii/image-editor.js';
 import { renderImageBadge } from './badge/badge-renderer.js?v=20260905-4';
-import { getBoardItems } from './ascii/image-board.js';
 import { QUESTIONS } from './personality/questions.js';
 import { scorePersonality } from './personality/scoring.js';
 import { ARCHETYPE_BY_ID } from './personality/archetypes.js';
@@ -141,7 +140,7 @@ async function prepareBadge() {
   state.badgeBlobUrl = '';
   render();
   try {
-    const canvas = state.mode === 'image' ? await renderImageBadge({ profile: { ...state.profile, group: effectiveGroup() }, artwork: imageState.artwork, boardItems: getBoardItems() }) : await renderBadge({
+    const canvas = state.mode === 'image' ? await renderImageBadge({ profile: { ...state.profile, group: effectiveGroup() }, artwork: imageState.artwork }) : await renderBadge({
       profile: { ...state.profile, group: effectiveGroup() },
       persona: state.result.primary,
       preferences: state.preferences,
@@ -287,7 +286,13 @@ app.addEventListener('click', async event => {
   if (action.dataset.action === 'edit-profile') { state.step = 2; render(); }
   if (action.dataset.action === 'personality-mode') { state.mode = 'personality'; state.step = state.result ? 4 : 3; render(); }
   if (action.dataset.action === 'image-mode') { state.mode = 'image'; state.step = 'image'; render(); }
-  if (action.dataset.action === 'select-image-flow') { imageState.flow = action.dataset.flow || 'ascii'; state.mode = 'image'; state.step = 'image'; render(); }
+  if (action.dataset.action === 'select-image-flow') {
+    imageState.flow = action.dataset.flow;
+    state.mode = 'image';
+    state.step = 'image';
+    render();
+    return;
+  }
   if (action.dataset.action === 'clear-selection') { clearSelection(); render(); }
   if (action.dataset.action === 'convert-image') { await imageJob(() => convertImage()); }
   if (action.dataset.action === 'image-badge' && imageState.artwork) { state.step = 5; await prepareBadge(); }
