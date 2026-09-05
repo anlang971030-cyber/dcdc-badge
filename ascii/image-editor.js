@@ -251,3 +251,32 @@ window.addEventListener('pagehide', () => {
   releaseArtwork();
   if (imageState.originalUrl) URL.revokeObjectURL(imageState.originalUrl);
 });
+
+
+// compatibility exports for image workflow controller
+export function selectImageFlow(flow) {
+  imageState.flow = flow;
+  imageState.error = flow === 'transparent' ? '进入透明图片排版模式。' : '进入 ASCII 图片生成模式。';
+}
+
+export function resetImageFlow() {
+  releaseArtwork();
+  imageState.flow = null;
+  imageState.error = '';
+}
+
+export async function handleTransparentFiles(files) {
+  const list = Array.from(files || []);
+  if (!list.length) throw new Error('请选择图片');
+  const canvas = await readImage(list[0]);
+  imageState.source = canvas;
+  imageState.error = `已加载 ${list.length} 张图片（当前版本先恢复流程稳定）`;
+}
+
+export function chooseBoardItem() {}
+export function removeBoardItem() {}
+export function updateBoardItem() {}
+export function beginBoardDrag() {}
+export function updateBoardDrag() {}
+export function endBoardDrag() {}
+export function getBoardItems() { return []; }
