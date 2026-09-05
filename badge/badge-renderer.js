@@ -1,3 +1,4 @@
+import { textLayout } from '../personality/persona-layouts.js';
 import { createPersonaSelection, seedFor } from '../personality/persona-variants.js';
 import { sanitizeInterests } from '../interests/interest-assets.js?v=20260905-4';
 import { getPersonaComposition, PERSONA_AREA } from '../components/persona-composer.js?v=20260905-4';
@@ -223,8 +224,13 @@ export async function renderBadge({ profile, persona, preferences = {}, layoutOv
   context.restore();
   drawInterestElements(context, interestImages, placements);
 
+  drawBadgeText(context, profile, persona, visual.layout.text, visual.seed);
+  drawSoftAccents(context, visual);
+  return canvas;
+}
+
+function drawBadgeText(context, profile, persona, text, seed) {
   const font = '"Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif';
-  const text = visual.layout.text;
   context.fillStyle = '#123D6A';
   context.textAlign = 'left';
   context.textBaseline = 'alphabetic';
@@ -234,16 +240,29 @@ export async function renderBadge({ profile, persona, preferences = {}, layoutOv
   context.fillText(profile.role, text.role.x, text.role.y, 760);
   context.font = `500 ${text.meta.size}px ${font}`;
   context.fillText(`${profile.group} · ${profile.specialty}`, text.meta.x, text.meta.y, 790);
+  if (persona) {
   context.fillStyle = '#157F91';
   context.font = `700 ${text.personaZh.size}px ${font}`;
   context.fillText(persona.nameZh, text.personaZh.x, text.personaZh.y);
   context.font = `700 ${text.personaEn.size}px Arial, sans-serif`;
   drawSpacedText(context, persona.nameEn, text.personaEn.x, text.personaEn.y, 3.4);
+  }
   context.fillStyle = '#123D6A';
   context.globalAlpha = 0.62;
   context.font = `500 ${text.serial.size}px Arial, sans-serif`;
-  drawSpacedText(context, `DCDC DIGITAL ID · ${String(visual.seed).padStart(10, '0')}`, text.serial.x, text.serial.y, 3.2);
+  drawSpacedText(context, `DCDC DIGITAL ID · ${String(seed).padStart(10, '0')}`, text.serial.x, text.serial.y, 3.2);
   context.globalAlpha = 1;
-  drawSoftAccents(context, visual);
+}
+
+export async function renderImageBadge({ profile, artwork }) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 2000; canvas.height = 900;
+  const context = canvas.getContext('2d');
+  context.drawImage(await loadImage('./assets/template-base.png'), 0, 0, 2000, 900);
+  const area = { x: 990, y: 80, width: 960, height: 770 };
+  const ratio = Math.min(area.width / artwork.width, area.height / artwork.height);
+  const w = artwork.width * ratio, h = artwork.height * ratio;
+  context.drawImage(artwork, area.x + (area.width-w)/2, area.y + (area.height-h)/2, w, h);
+  drawBadgeText(context, profile, null, textLayout(), seedFor(profile, 'image'));
   return canvas;
 }

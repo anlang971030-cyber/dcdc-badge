@@ -52,7 +52,7 @@ function layout(palette, glassesAnchor, interestSlots, persona) {
   };
 }
 
-function textLayout() {
+export function textLayout() {
   return {
     name: { x: 102, y: 402, size: 144 },
     role: { x: 105, y: 620, size: 55 },
