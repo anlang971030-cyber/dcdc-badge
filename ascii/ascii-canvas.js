@@ -6,12 +6,13 @@ export const DEFAULTS = Object.freeze({
   preset: 'CUSTOM',
   customText: 'DCDC数字创新设计研究中心\nDIGITAL CREATIVE DESIGN\nclass BadgeMaker {}',
   colorMode: 'ORIGINAL',
-  customColor: '#2E6CF6'
+  customColor: '#2E6CF6',
+  invert: false
 });
 
 export const COPY = Object.freeze({
   title: '上传图片，生成透明 ASCII 人像',
-  hint: '支持自定义中文 / 英文 / 代码字符。可先在原图上拖拽框选主体，再进行透明抠图与 ASCII 转换。字符大小控制的是像素采样块大小：越大，采样点越少，颗粒感越强。',
+  hint: '支持自定义中文 / 英文 / 代码字符。可直接上传图片生成 ASCII。字符大小控制的是像素采样块大小：越大，采样点越少，颗粒感越强。支持通过复选框切换反相效果。',
   badgeLabel: '图片定制 ASCII 标识牌'
 });
 
@@ -91,7 +92,6 @@ export function cropTransparent(img, padding = 8) {
 }
 
 function parseColor(mode, rgb, customColor) {
-  if (mode === 'INVERT') return [255-rgb[0], 255-rgb[1], 255-rgb[2]];
   if (mode === 'BLACK') return [30, 30, 30];
   if (mode === 'BLUE') return [46, 108, 246];
   if (mode === 'CUSTOM') {
@@ -146,14 +146,15 @@ export function renderAscii(source, options = {}) {
       if (alpha < 20) continue;
 
       const gray = Math.round(0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]);
-      if (gray >= threshold) continue;
+      const mappedGray = c.invert ? 255 - gray : gray;
+      if (mappedGray >= threshold) continue;
 
       const token = c.preset === 'CUSTOM'
         ? tokens[cursor++ % tokens.length]
-        : tokens[Math.floor(gray * (tokens.length - 1) / 255)];
+        : tokens[Math.floor(mappedGray * (tokens.length - 1) / 255)];
 
       const color = parseColor(c.colorMode, rgb, c.customColor);
-      const a = Math.max(40, Math.min(255, alpha * (threshold - gray) / threshold));
+      const a = Math.max(40, Math.min(255, alpha * (threshold - mappedGray) / threshold));
       ctx.fillStyle = `rgba(${color.join(',')},${a / 255})`;
 
       const px = x * cellW + cellW / 2;
