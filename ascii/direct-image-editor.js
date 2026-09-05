@@ -56,8 +56,7 @@ function listMarkup() {
   return `<div class="direct-list">${directItems.map((item, index) => `
     <button class="direct-list-item ${item.id === activeId ? 'active' : ''}" data-direct-select="${item.id}">
       <span class="direct-list-index">${index + 1}</span>
-      <img src="${item.url}" alt="${escapeHtml(item.name)}">
-      <span class="direct-list-name">${escapeHtml(item.name)}</span>
+      <img src="${item.url}" alt="图片${index + 1}">
     </button>`).join('')}</div>`;
 }
 
