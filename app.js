@@ -1,5 +1,6 @@
 import { COPY } from './ascii/ascii-canvas.js';
 import { imageState, editorMarkup, handleImageFile, convertImage, releaseArtwork } from './ascii/image-editor.js';
+import { directEditorMarkup, handleDirectFiles, directItems, updateDirectItem, removeDirectItem, moveDirectItem, selectDirectItem, getActiveDirectItem, setDirectPosition } from './ascii/direct-image-editor.js';
 import { renderImageBadge } from './badge/badge-renderer.js?v=20260905-4';
 import { QUESTIONS } from './personality/questions.js';
 import { scorePersonality } from './personality/scoring.js';
@@ -31,6 +32,8 @@ const state = {
   lightbox: false,
   loading: false
 };
+
+const directDrag = { id: null, rect: null, startX: 0, startY: 0, originX: 0, originY: 0 };
 
 function safeParse(value) {
   try { return JSON.parse(value); } catch { return null; }
@@ -104,15 +107,11 @@ function renderResult() {
 
 function renderBadgeScreen() {
   const persona = state.mode === 'image' ? null : state.result.primary;
-  return shell(`<section class="screen badge-screen"><p class="eyebrow">YOUR DCDC BADGE</p><h2>专属标识牌已生成</h2><p class="lead">${escapeHtml(state.profile.name)} · ${persona ? persona.nameZh + ' / ' + persona.nameEn : COPY.badgeLabel}</p><div class="preview-wrap"><figure class="preview-card">${state.loading ? '<div class="loading-card">正在合成标识牌…</div>' : `<img src="${state.badgeUrl}" alt="${escapeHtml(state.profile.name)}的专属数创标识牌" data-action="zoom">`}</figure><p class="preview-note">点击标识牌查看大图 · 高清文件 2000 × 900 px</p></div><div class="actions"><button class="btn btn-primary" data-action="download" ${state.loading ? 'disabled' : ''}>下载 PNG<span>↓</span></button><button class="btn btn-ghost" data-action="back-result">${state.mode === 'image' ? '返回图片定制' : '返回人格结果'}</button></div></section>`);
+  return shell(`<section class="screen badge-screen"><p class="eyebrow">YOUR DCDC BADGE</p><h2>专属标识牌已生成</h2><p class="lead">${escapeHtml(state.profile.name)} · ${persona ? persona.nameZh + ' / ' + persona.nameEn : (state.imageFlow === 'direct' ? '心仪图片标识牌' : COPY.badgeLabel)}</p><div class="preview-wrap"><figure class="preview-card">${state.loading ? '<div class="loading-card">正在合成标识牌…</div>' : `<img src="${state.badgeUrl}" alt="${escapeHtml(state.profile.name)}的专属数创标识牌" data-action="zoom">`}</figure><p class="preview-note">点击标识牌查看大图 · 高清文件 2000 × 900 px</p></div><div class="actions"><button class="btn btn-primary" data-action="download" ${state.loading ? 'disabled' : ''}>下载 PNG<span>↓</span></button><button class="btn btn-ghost" data-action="back-result">${state.mode === 'image' ? '返回图片定制' : '返回人格结果'}</button></div></section>`);
 }
 
 function renderImageChoice() {
-  return shell(`<section class="screen"><p class="eyebrow">IMAGE WORKFLOW</p><h2>选择图片制作方式</h2><p class="lead">请选择直接图片排版或 ASCII 生成。</p><div class="stack"><button class="answer-card" data-action="direct-image-mode">上传心仪图片制作 →</button><button class="answer-card" data-action="ascii-image-mode">上传照片生成 ASCII →</button></div></section>`);
-}
-
-function renderDirectImage() {
-  return shell(`<section class="screen"><p class="eyebrow">DIRECT IMAGE</p><h2>上传心仪图片制作</h2><p class="lead">功能模块加载中。</p><div class="field"><label>上传图片</label><input id="direct-image-file" type="file" multiple accept="image/*"></div><div id="direct-preview"></div><div class="actions"><button class="btn btn-ghost" data-action="choose-mode">返回</button></div></section>`);
+  return shell(`<section class="screen"><p class="eyebrow">IMAGE WORKFLOW</p><h2>选择图片制作方式</h2><p class="lead">请选择直接图片排版或 ASCII 生成。</p><div class="stack"><button class="answer-card" data-action="direct-image-mode">上传心仪图片制作 →</button><button class="answer-card" data-action="ascii-image-mode">上传照片生成 ASCII →</button></div><div class="actions"><button class="btn btn-ghost" data-action="choose-mode">返回制作方式</button></div></section>`);
 }
 
 function renderMode() {
@@ -121,13 +120,16 @@ function renderMode() {
 function render() {
   if (state.step === 'mode') app.innerHTML = renderMode();
   if (state.step === 'image-choice') app.innerHTML = renderImageChoice();
+  if (state.step === 'direct-image') app.innerHTML = shell(directEditorMarkup());
   if (state.step === 'image') app.innerHTML = shell(editorMarkup());
-  if (state.step === 'direct-image') app.innerHTML = renderDirectImage();
   if (state.step === 1) app.innerHTML = renderWelcome();
   if (state.step === 2) app.innerHTML = renderProfile();
   if (state.step === 3) app.innerHTML = renderTest();
   if (state.step === 4) app.innerHTML = renderResult();
   if (state.step === 5) app.innerHTML = renderBadgeScreen();
+  if (state.lightbox && state.badgeUrl) {
+    app.insertAdjacentHTML('beforeend', `<div class="lightbox" role="dialog" aria-modal="true" aria-label="标识牌大图"><button class="lightbox-close" aria-label="关闭" data-action="close-zoom">×</button><img src="${state.badgeUrl}" alt="高清标识牌"></div>`);
+  }
 }
 
 function validateProfile() {
@@ -148,7 +150,7 @@ async function prepareBadge() {
   state.badgeBlobUrl = '';
   render();
   try {
-    const canvas = state.mode === 'image' ? await renderImageBadge({ profile: { ...state.profile, group: effectiveGroup() }, artwork: state.imageFlow==='direct' ? null : imageState.artwork, directItems: state.imageFlow==='direct' ? directItems : null }) : await renderBadge({
+    const canvas = state.mode === 'image' ? await renderImageBadge({ profile: { ...state.profile, group: effectiveGroup() }, artwork: state.imageFlow === 'direct' ? null : imageState.artwork, boardItems: state.imageFlow === 'direct' ? directItems : [] }) : await renderBadge({
       profile: { ...state.profile, group: effectiveGroup() },
       persona: state.result.primary,
       preferences: state.preferences,
@@ -177,6 +179,14 @@ app.addEventListener('input', event => {
     document.querySelector('#image-status').textContent = '参数已修改，请点击“生成 ASCII”。';
   }
 
+  const directField = event.target.dataset.directField;
+  const directId = event.target.dataset.directId;
+  if (directField && directId) {
+    updateDirectItem(directId, directField, event.target.value);
+    render();
+    return;
+  }
+
   if (event.target.id in state.profile) {
     state.profile[event.target.id] = event.target.value;
     persist();
@@ -193,10 +203,9 @@ async function imageJob(job) {
 }
 
 app.addEventListener('change', async event => {
-  if (event.target.id === 'direct-files' && event.target.files.length) { await handleDirectFiles([...event.target.files]); render(); return; }
+  if (event.target.id === 'direct-files' && event.target.files.length) { await handleDirectFiles([...event.target.files]); event.target.value=''; render(); return; }
   if (event.target.id === 'image-file' && event.target.files[0]) { const file = event.target.files[0]; await imageJob(() => handleImageFile(file)); }
   if (event.target.id === 'split-view') { imageState.split = event.target.checked; render(); }
-  if (event.target.id === 'direct-image-file') { const files=[...event.target.files]; import('./image-layout/editor.js').then(m=>m.loadImages(files)); }
 
   if (event.target.id === 'group') {
     state.profile.group = event.target.value;
@@ -205,11 +214,51 @@ app.addEventListener('change', async event => {
   }
 });
 
+app.addEventListener('pointerdown', event => {
+  const item = event.target.closest('[data-direct-draggable]');
+  if (!item) return;
+  const stage = document.querySelector('#direct-board');
+  if (!stage) return;
+  const active = directItems.find(entry => entry.id === Number(item.dataset.directDraggable));
+  if (!active) return;
+  selectDirectItem(active.id);
+  directDrag.id = active.id;
+  directDrag.rect = stage.getBoundingClientRect();
+  directDrag.startX = event.clientX;
+  directDrag.startY = event.clientY;
+  directDrag.originX = active.x;
+  directDrag.originY = active.y;
+  event.preventDefault();
+});
+
+app.addEventListener('pointermove', event => {
+  if (!directDrag.id || !directDrag.rect) return;
+  const dx = (event.clientX - directDrag.startX) / directDrag.rect.width;
+  const dy = (event.clientY - directDrag.startY) / directDrag.rect.height;
+  const x = directDrag.originX + dx * (2000 / 960);
+  const y = directDrag.originY + dy * (900 / 770);
+  setDirectPosition(directDrag.id, x, y);
+  render();
+});
+
+function stopDirectDrag() {
+  directDrag.id = null;
+  directDrag.rect = null;
+}
+app.addEventListener('pointerup', stopDirectDrag);
+app.addEventListener('pointercancel', stopDirectDrag);
+
 app.addEventListener('click', async event => {
   const glasses = event.target.closest('[data-glasses]');
   if (glasses) {
     state.preferences.glasses = glasses.dataset.glasses;
     persist();
+    render();
+    return;
+  }
+  const directSelect = event.target.closest('[data-direct-select]');
+  if (directSelect) {
+    selectDirectItem(directSelect.dataset.directSelect);
     render();
     return;
   }
@@ -248,8 +297,17 @@ app.addEventListener('click', async event => {
   if (action.dataset.action === 'image-mode') { state.mode = 'image'; state.step = 'image-choice'; render(); }
   if (action.dataset.action === 'direct-image-mode') { state.mode = 'image'; state.imageFlow='direct'; state.step='direct-image'; render(); }
   if (action.dataset.action === 'ascii-image-mode') { state.mode = 'image'; state.imageFlow='ascii'; state.step='image'; render(); }
+  if (action.dataset.action === 'back-image-choice') { state.step = 'image-choice'; render(); }
+  if (action.dataset.action === 'direct-remove') { const active = getActiveDirectItem(); if (active) removeDirectItem(active.id); render(); }
+  if (action.dataset.action === 'direct-layer-up') { const active = getActiveDirectItem(); if (active) moveDirectItem(active.id, 'up'); render(); }
+  if (action.dataset.action === 'direct-layer-down') { const active = getActiveDirectItem(); if (active) moveDirectItem(active.id, 'down'); render(); }
   if (action.dataset.action === 'convert-image') { await imageJob(() => convertImage()); }
-  if (action.dataset.action === 'image-badge' && imageState.artwork) { state.step = 5; await prepareBadge(); }
+  if (action.dataset.action === 'image-badge') {
+    if ((state.imageFlow === 'direct' && directItems.length) || (state.imageFlow !== 'direct' && imageState.artwork)) {
+      state.step = 5;
+      await prepareBadge();
+    }
+  }
   if (action.dataset.action === 'download-art' && imageState.url) { const a = document.createElement('a'); a.href = imageState.url; a.download = 'DCDC-透明字符画.png'; a.click(); }
 
   if (action.dataset.action === 'start') { state.step = 2; render(); }
@@ -279,12 +337,12 @@ app.addEventListener('click', async event => {
     state.step = 5;
     await prepareBadge();
   }
-  if (action.dataset.action === 'back-result') { state.step = state.mode === 'image' ? 'image' : 4; render(); }
+  if (action.dataset.action === 'back-result') { state.step = state.mode === 'image' ? (state.imageFlow === 'direct' ? 'direct-image' : 'image') : 4; render(); }
   if (action.dataset.action === 'zoom') { state.lightbox = true; render(); }
   if (action.dataset.action === 'close-zoom') { state.lightbox = false; render(); }
   if (action.dataset.action === 'download' && state.badgeBlobUrl) {
     const link = document.createElement('a');
-    link.download = `DCDC-${state.profile.name}-${state.mode === 'image' ? 'Image' : state.result.primary.nameEn}.png`;
+    link.download = `DCDC-${state.profile.name}-${state.mode === 'image' ? (state.imageFlow === 'direct' ? 'DirectImage' : 'ImageAscii') : state.result.primary.nameEn}.png`;
     link.href = state.badgeBlobUrl;
     document.body.appendChild(link);
     link.click();
