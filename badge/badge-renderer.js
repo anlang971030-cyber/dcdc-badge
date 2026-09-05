@@ -256,23 +256,35 @@ function drawBadgeText(context, profile, persona, text, seed) {
 
 export async function renderImageBadge({ profile, artwork, boardItems = [] }) {
   const canvas = document.createElement('canvas');
-  canvas.width = 2000; canvas.height = 900;
+  canvas.width = 2000;
+  canvas.height = 900;
   const context = canvas.getContext('2d');
   context.drawImage(await loadImage('./assets/template-base.png'), 0, 0, 2000, 900);
   const area = { x: 990, y: 80, width: 960, height: 770 };
-  if (boardItems.length) {
-    boardItems.forEach(item => {
+
+  context.save();
+  context.beginPath();
+  context.rect(area.x, area.y, area.width, area.height);
+  context.clip();
+
+  if (boardItems?.length) {
+    for (const item of boardItems) {
       const source = item.canvas || artwork;
-      if (!source) return;
-      const ratio = Math.min(area.width / source.width, area.height / source.height) * (item.scale || 1);
-      const w = source.width * ratio, h = source.height * ratio;
-      context.drawImage(source, area.x + area.width * (item.x || .5)-w/2, area.y + area.height * (item.y || .5)-h/2, w, h);
-    });
+      if (!source) continue;
+      const drawWidth = source.width * (item.baseScale || 1) * (item.scale || 1);
+      const drawHeight = source.height * (item.baseScale || 1) * (item.scale || 1);
+      const centerX = area.x + area.width * (item.x ?? 0.5);
+      const centerY = area.y + area.height * (item.y ?? 0.52);
+      context.drawImage(source, centerX - drawWidth / 2, centerY - drawHeight / 2, drawWidth, drawHeight);
+    }
   } else if (artwork) {
     const ratio = Math.min(area.width / artwork.width, area.height / artwork.height);
-    const w = artwork.width * ratio, h = artwork.height * ratio;
-    context.drawImage(artwork, area.x + (area.width-w)/2, area.y + (area.height-h)/2, w, h);
+    const w = artwork.width * ratio;
+    const h = artwork.height * ratio;
+    context.drawImage(artwork, area.x + (area.width - w) / 2, area.y + (area.height - h) / 2, w, h);
   }
+
+  context.restore();
   drawBadgeText(context, profile, null, textLayout(), seedFor(profile, 'image'));
   return canvas;
 }
