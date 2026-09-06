@@ -138,7 +138,7 @@ export function editorMarkup() {
     <div id="ascii-comparison-wrap">${comparisonMarkup()}</div>
   </div>
   <p class="error" role="status" id="image-status">${esc(imageState.error)}</p>
-  <div class="actions ascii-top-actions"><button class="btn btn-primary" data-action="convert-image" ${imageState.busy || !imageState.activeSourceId ? 'disabled' : ''}>${imageState.busy ? '正在处理…' : '生成当前图片 ASCII'}</button><button class="btn btn-ghost" data-action="download-art" ${!activeArtwork()?.artworkUrl ? 'disabled' : ''}>下载当前透明字符画 PNG</button><button class="btn btn-ghost" data-action="choose-mode">返回图标制作方式</button></div>
+  <div class="actions ascii-top-actions"><button class="btn btn-primary" data-action="convert-image" ${imageState.busy || !imageState.activeSourceId ? 'disabled' : ''}>${imageState.busy ? '正在处理…' : '生成当前图片 ASCII'}</button><button class="btn btn-ghost" data-action="download-art" ${!activeArtwork()?.artworkUrl ? 'disabled' : ''}>下载当前透明字符画 PNG</button><button class="btn btn-ghost" data-action="back-image-choice">返回图片制作方式</button></div>
   <section class="ascii-layout-section">
     <p class="eyebrow">ASCII LAYOUT EDITOR</p>
     <h3>字符画自定义编辑区</h3>
