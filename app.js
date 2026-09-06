@@ -61,7 +61,8 @@ function chineseLength(value) {
 const brand = `<div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>我的数创标识牌</span></div>`;
 
 function shell(content) {
-  return `<div class="app-shell"><header class="topbar">${brand}<span class="step-count">Step ${typeof state.step === 'number' ? state.step : 3} / 5</span></header><div class="progress" aria-hidden="true"><span style="width:${(typeof state.step === 'number' ? state.step : 3) * 20}%"></span></div>${content}</div>`;
+  const currentStep = typeof state.step === 'number' ? (state.step === 5 ? 4 : Math.min(state.step, 4)) : 3;
+  return `<div class="app-shell"><header class="topbar">${brand}<span class="step-count">Step ${currentStep} / 4</span></header><div class="progress" aria-hidden="true"><span style="width:${currentStep * 25}%"></span></div>${content}</div>`;
 }
 
 function field(id, label, placeholder, value, hint, maxLength) {
@@ -112,7 +113,7 @@ function renderBadgeScreen() {
 }
 
 function renderImageChoice() {
-  return shell(`<section class="screen image-choice-screen"><p class="eyebrow">IMAGE WORKFLOW</p><h2>选择图片制作方式</h2><p class="lead">请选择直接图片排版或 ASCII 生成。</p><div class="stack image-choice-stack"><button class="answer-card" data-action="direct-image-mode"><span>上传心仪图片制作 →</span><small>直接上传喜欢的图片，在铭牌底图中调整大小、位置和方向。</small></button><button class="answer-card" data-action="ascii-image-mode"><span>上传照片生成 ASCII →</span><small>图片先用 AI 做预处理提高生成质量：<br>（1）杂乱照片提取指定主体<br>（2）生成无背景的 PNG 图片</small></button></div><div class="actions"><button class="btn btn-ghost" data-action="choose-mode">返回制作方式</button></div></section>`);
+  return shell(`<section class="screen image-choice-screen"><p class="eyebrow">IMAGE WORKFLOW</p><h2>选择图片制作方式</h2><p class="lead">请选择直接图片排版或 ASCII 生成。</p><div class="stack image-choice-stack"><button class="answer-card" data-action="direct-image-mode"><span>上传心仪图片制作 →</span><small>直接上传喜欢的图片，在铭牌底图中调整大小、位置和方向。</small></button><button class="answer-card" data-action="ascii-image-mode"><span>上传照片生成 ASCII →</span></button><div class="image-ai-tip"><strong>图片预处理建议</strong><p>（1）杂乱照片提取指定主体</p><p>（2）生成无背景的 PNG 图片</p></div></div><div class="actions"><button class="btn btn-ghost" data-action="choose-mode">返回图标制作方式</button></div></section>`);
 }
 
 function renderMode() {
